@@ -1,0 +1,61 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend Alinea Ágil — API REST (Node.js, TypeScript, PostgreSQL/Prisma)",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "seed:platform": "tsx src/scripts/seed-platform-super-admin.ts",
+    "seed": "ALLOW_DB_SEED=1 tsx src/scripts/seed/run.ts",
+    "seed:demo": "ALLOW_DB_SEED=1 tsx src/scripts/seed/run.ts",
+    "db:reset": "ALLOW_DB_SEED=1 tsx src/scripts/seed/run.ts reset",
+    "db:reset:demo": "ALLOW_DB_SEED=1 tsx src/scripts/seed/run.ts --reset",
+    "internal:otp-from-code-hash": "tsx src/scripts/resolve-verification-otp-from-code-hash.ts",
+    "prisma:generate": "prisma generate",
+    "postgres:migrate:dev": "prisma migrate dev",
+    "postgres:migrate:deploy": "prisma migrate deploy",
+    "postgres:migrate:reset": "prisma migrate reset",
+    "postgres:validate": "tsx src/scripts/validate-postgres-setup.ts",
+    "test": "find src -name '*.test.ts' ! -path 'src/test/*' -print0 | xargs -0 tsx --test",
+    "test:postgres": "tsx --test src/test/postgres/*.test.ts",
+    "test:postgres:identity": "tsx --test src/test/postgres/identity-domain.integration.test.ts",
+    "test:postgres:workspace": "tsx --test src/test/postgres/workspace-domain.integration.test.ts",
+    "test:postgres:projects": "tsx --test src/test/postgres/projects-work-items-domain.integration.test.ts",
+    "test:postgres:scrum-kanban": "tsx --test src/test/postgres/scrum-kanban-domain.integration.test.ts",
+    "test:postgres:guided-sessions": "tsx --test src/test/postgres/guided-sessions-domain.integration.test.ts",
+    "test:postgres:operating-consumers-alignment": "tsx --test src/test/postgres/operating-consumers-runtime-alignment.integration.test.ts",
+    "test:postgres:work-ready-done-controls": "tsx --test src/test/postgres/work-ready-done-controls-service-postgres.integration.test.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "@sentry/node": "^9.47.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.4.1",
+    "helmet": "^8.1.0",
+    "otplib": "^12.0.1",
+    "pdfkit": "^0.18.0",
+    "resend": "^4.8.0",
+    "typescript": "^5.7.2",
+    "uuid": "^11.0.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^11.0.0",
+    "@types/pdfkit": "^0.17.6",
+    "prisma": "^6.19.0",
+    "testcontainers": "^11.0.0",
+    "tsx": "^4.19.2"
+  }
+}

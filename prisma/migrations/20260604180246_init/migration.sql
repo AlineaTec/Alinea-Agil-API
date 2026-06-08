@@ -1,0 +1,5 @@
+-- RenameIndex
+ALTER INDEX "identity_registration_intents_provisioned_workspace_public_id_i" RENAME TO "identity_registration_intents_provisioned_workspace_public__idx";
+
+-- RenameIndex
+ALTER INDEX "identity_verification_challenges_registration_intent_public_id_" RENAME TO "identity_verification_challenges_registration_intent_public_idx";

@@ -1,0 +1,10 @@
+export type ImpedimentAuditAction =
+  | "impediment_created"
+  | "impediment_updated"
+  | "impediment_status_changed"
+  | "impediment_severity_changed"
+  | "impediment_assignee_changed"
+  | "impediment_resolved"
+  | "impediment_dismissed"
+  | "impediment_reopened"
+  | "impediment_detected_at_changed"
