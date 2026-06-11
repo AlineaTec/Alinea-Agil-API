@@ -22,6 +22,7 @@ import { createWorkspaceBillingPrimaryProductMutationGate } from "./middleware/w
 import type { WorkspaceLicenseService } from "../workspace-licenses/services/workspace-license.service.js"
 import type { WorkspaceMemberRepository } from "../workspace-users/persistence/workspace-member.repository.js"
 import type { WorkspaceCatalogRepository } from "../platform-tenants/persistence/workspace-catalog.repository.js"
+import type { WorkspacePlanContextService } from "../commercial-pricing/workspace-plan-context.service.js"
 import { mountPaymentReceiptsWorkspaceRoutes } from "../payment-receipts/payment-receipts.module.js"
 import type { PaymentReceiptWebhookBridge } from "../payment-receipts/services/payment-receipt-webhook.bridge.js"
 import type { PaymentReceiptAccessService } from "../payment-receipts/services/payment-receipt-access.service.js"
@@ -65,6 +66,7 @@ export function createWorkspaceBillingStateService(options: {
   workspaceMemberRepository: WorkspaceMemberRepository
   billingNotifications?: BillingNotificationPort
   workspaceCatalog?: WorkspaceCatalogRepository | null
+  workspacePlanContext?: WorkspacePlanContextService | null
   billing?: BillingRepositories
 }): WorkspaceBillingStateService {
   const billing = options.billing ?? createBillingRepositories()
@@ -75,6 +77,7 @@ export function createWorkspaceBillingStateService(options: {
     options.workspaceLicenseService,
     options.billingNotifications,
     options.workspaceCatalog ?? null,
+    options.workspacePlanContext ?? null,
   )
 }
 

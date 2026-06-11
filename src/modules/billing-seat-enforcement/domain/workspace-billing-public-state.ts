@@ -1,3 +1,4 @@
+import type { CommercialPlanTier } from "../../commercial-pricing/commercial-pricing.constants.js"
 import type { deriveExpansionGuards } from "./billing-guards.policy.js"
 import type { WorkspaceBillingSnapshotProps } from "./workspace-billing-snapshot.js"
 import type { BillingSource } from "./workspace-billing-status.js"
@@ -8,6 +9,8 @@ export type WorkspaceBillingPublicState = {
   billingSource: BillingSource
   billingStatus: WorkspaceBillingSnapshotProps["billingStatus"]
   commercialExternalSnapshot: string | null
+  /** Tier comercial (Gratis / Estándar / Profesional) para entitlements en cliente. */
+  commercialPlanTier: CommercialPlanTier
   planKey: string
   seats: {
     includedInPlan: number

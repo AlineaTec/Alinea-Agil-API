@@ -23,6 +23,7 @@ import {
   mountBillingSeatEnforcementModule,
   mountPaddleBillingWebhookIntegration,
 } from "./modules/billing-seat-enforcement/billing-seat-enforcement.module.js"
+import { WorkspacePlanContextService } from "./modules/commercial-pricing/workspace-plan-context.service.js"
 import { WorkspaceInvitationService } from "./modules/workspace-invitations/services/workspace-invitation.service.js"
 import { mountWorkspaceInvitationsPublicModule } from "./modules/workspace-invitations/workspace-invitations.module.js"
 import {
@@ -288,11 +289,13 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
     runtimePersistence.billing,
     runtimePersistence.workspace.identity,
   )
+  const workspacePlanContextService = new WorkspacePlanContextService(getPrismaClient())
   const workspaceBillingStateService = createWorkspaceBillingStateService({
     workspaceLicenseService,
     workspaceMemberRepository,
     billingNotifications: workspaceBillingNotifications,
     workspaceCatalog: workspaceCatalogRepository,
+    workspacePlanContext: workspacePlanContextService,
     billing: runtimePersistence.billing,
   })
   const paymentReceiptAccess = createPaymentReceiptAccessService(

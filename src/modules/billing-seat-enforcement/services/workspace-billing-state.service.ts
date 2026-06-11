@@ -16,6 +16,7 @@ import type { WorkspaceLicenseSummary } from "../../workspace-licenses/domain/wo
 import type { WorkspaceLicenseService } from "../../workspace-licenses/services/workspace-license.service.js"
 import type { WorkspaceCatalogRepository } from "../../platform-tenants/persistence/workspace-catalog.repository.js"
 import type { CommercialPlanKind } from "../../commercial-pricing/commercial-pricing.constants.js"
+import type { WorkspacePlanContextService } from "../../commercial-pricing/workspace-plan-context.service.js"
 
 import type { BillingNotificationPort } from "../domain/billing-notification-port.js"
 import type { WorkspaceBillingPublicState } from "../domain/workspace-billing-public-state.js"
@@ -142,6 +143,7 @@ export class WorkspaceBillingStateService {
     private readonly workspaceLicenses: WorkspaceLicenseService,
     private readonly billingNotifications?: BillingNotificationPort,
     private readonly workspaceCatalog: WorkspaceCatalogRepository | null = null,
+    private readonly workspacePlanContext: WorkspacePlanContextService | null = null,
   ) {}
 
   /** Webhook/job: fallo de renovación recurrente confirmado — inicia gracia 15 días calendario. */
@@ -368,11 +370,16 @@ export class WorkspaceBillingStateService {
 
     const merged = mergeScheduledEntitlementForDisplay(row)
 
+    const commercialPlanTier = this.workspacePlanContext
+      ? await this.workspacePlanContext.resolvePlanTier(workspacePublicId)
+      : "estandar"
+
     return {
       workspacePublicId: row.workspacePublicId,
       billingSource: row.billingSource,
       billingStatus: row.billingStatus,
       commercialExternalSnapshot: row.commercialExternalSnapshot,
+      commercialPlanTier,
       planKey: row.planKey,
       seats: {
         includedInPlan: row.includedSeats,
