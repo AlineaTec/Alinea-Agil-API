@@ -68,6 +68,12 @@ function shouldExposeOtpInResponse(): boolean {
   return v === "true" || v === "1"
 }
 
+/**
+ * Solo desarrollo (`REGISTRATION_EXPOSE_OTP_IN_RESPONSE`): conserva el OTP en claro
+ * para respuestas idempotentes del mismo intento (p. ej. doble montaje en React Strict Mode).
+ */
+const devOtpPlainByIntentPublicId = new Map<string, string>()
+
 /** Unicidad violada (Prisma P2002 o código 11000 legacy). */
 function isMongoDuplicateKeyError(err: unknown): boolean {
   return (
@@ -177,6 +183,7 @@ export class RegistrationFlowService {
    */
   async requestVerificationCode(
     intentPublicId: string,
+    options?: { reissue?: boolean },
   ): Promise<VerificationRequestResponse> {
     const intent =
       await this.registrationIntentRepository.findByPublicId(intentPublicId)
@@ -193,6 +200,24 @@ export class RegistrationFlowService {
       return { sent: false, reason: "intent_expired" }
     }
 
+    const reissue = options?.reissue === true
+    if (!reissue) {
+      const existingPending =
+        await this.verificationChallengeRepository.findLatestPendingChallengeForIntent(
+          intentPublicId,
+        )
+      if (existingPending && existingPending.expiresAt > now) {
+        if (shouldExposeOtpInResponse()) {
+          const devCode = devOtpPlainByIntentPublicId.get(intentPublicId)
+          if (devCode !== undefined) {
+            return { sent: true, devCode }
+          }
+        }
+        return { sent: true }
+      }
+    }
+
+    devOtpPlainByIntentPublicId.delete(intentPublicId)
     await this.verificationChallengeRepository.supersedePendingForIntent(
       intentPublicId,
     )
@@ -226,6 +251,7 @@ export class RegistrationFlowService {
     }
 
     if (shouldExposeOtpInResponse()) {
+      devOtpPlainByIntentPublicId.set(intentPublicId, plainCode)
       return { sent: true, devCode: plainCode }
     }
 
@@ -298,6 +324,7 @@ export class RegistrationFlowService {
       challenge.challengePublicId,
       { status: "CONSUMED" },
     )
+    devOtpPlainByIntentPublicId.delete(intentPublicId)
     await this.registrationIntentRepository.updateByPublicId(intentPublicId, {
       status: "EMAIL_VERIFIED",
       expiresAt: defaultIntentExpiry(now),
@@ -921,6 +948,7 @@ export class RegistrationFlowService {
         })
 
       await this.linkPaddleSubscriptionFromIntent(result.workspacePublicId, intent, now)
+      await this.sendRegistrationWelcomeBestEffort(intent, normalizedCode)
 
       return {
         ok: true,
@@ -969,6 +997,29 @@ export class RegistrationFlowService {
         return { ok: false, reason: "invalid_intent_state" }
       }
       throw err
+    }
+  }
+
+  private async sendRegistrationWelcomeBestEffort(
+    intent: IdentityRegistrationIntent,
+    workspaceCode: string,
+  ): Promise<void> {
+    if (
+      intent.accountFullName === undefined ||
+      intent.workspaceDisplayName === undefined
+    ) {
+      return
+    }
+    try {
+      await this.transactionalEmail.sendRegistrationWelcome({
+        toNormalizedEmail: intent.emailNormalized,
+        accountFullName: intent.accountFullName,
+        workspaceDisplayName: intent.workspaceDisplayName,
+        workspaceCode,
+        planTier: planTierFromPlanSku(intent.planSku),
+      })
+    } catch {
+      /* ledger + log en TransactionalEmailService */
     }
   }
 

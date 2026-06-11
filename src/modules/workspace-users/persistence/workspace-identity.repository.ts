@@ -8,6 +8,7 @@ export type WorkspaceIdentitySnapshot = {
   code: string
   displayName: string
   modality: WorkspaceModality | "empresa"
+  sourceRegistrationIntentPublicId: string
 }
 
 export interface WorkspaceIdentityRepository {

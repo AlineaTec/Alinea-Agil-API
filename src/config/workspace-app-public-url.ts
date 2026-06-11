@@ -19,3 +19,13 @@ export function workspaceBillingHubUrl(_workspacePublicId: string): string | nul
   if (!origin) return null
   return `${origin}/app/workspace/billing`
 }
+
+export function workspaceAppLoginUrl(): string | null {
+  const origin = getWorkspaceAppPublicOrigin()
+  return origin ? `${origin}/login` : null
+}
+
+export function workspaceAppHomeUrl(): string | null {
+  const origin = getWorkspaceAppPublicOrigin()
+  return origin ? `${origin}/app` : null
+}

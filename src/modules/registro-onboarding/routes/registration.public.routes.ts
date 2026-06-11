@@ -278,6 +278,7 @@ export function createRegistrationPublicRouter(
 
         const result = await registrationFlowService.requestVerificationCode(
           parsed.data.intentPublicId,
+          { reissue: parsed.data.reissue },
         )
         res.status(200).json(result)
       } catch (err) {

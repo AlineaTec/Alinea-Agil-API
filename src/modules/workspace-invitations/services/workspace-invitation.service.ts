@@ -51,6 +51,7 @@ export type PublicInvitationResolveResult =
       fullNameProposed: string
       roleLabel: string
       expiresAt: string
+      assignSeatProposal: boolean
       hasRegisteredAccount: boolean
       alreadyMember: boolean
     }
@@ -224,6 +225,10 @@ export class WorkspaceInvitationService {
     if (this.transactionalEmail && ws) {
       const url = buildAcceptUrl(rawToken)
       if (url) {
+        const inviterMember = await this.members.findByWorkspaceAndUserPublicId(
+          input.workspacePublicId,
+          input.actorUserPublicId,
+        )
         await this.transactionalEmail.sendWorkspaceInvitationSent({
           toEmail: emailNormalized,
           displayName: fullName,
@@ -231,6 +236,7 @@ export class WorkspaceInvitationService {
           workspaceCode: ws.code,
           roleLabel: roleLabelEs(input.workspaceRoleAdministrative, input.workspaceRoleMethodological),
           acceptUrl: url,
+          invitedByDisplayName: inviterMember?.fullName ?? null,
         })
         const sent = await this.invitations.findByInvitationPublicId(invitationPublicId)
         if (sent && sent.status === "pending") {
@@ -271,6 +277,7 @@ export class WorkspaceInvitationService {
       fullNameProposed: inv.fullNameProposed,
       roleLabel: roleLabelEs(inv.workspaceRoleAdministrative, inv.workspaceRoleMethodological),
       expiresAt: inv.expiresAt.toISOString(),
+      assignSeatProposal: inv.assignSeatProposal,
       hasRegisteredAccount: reg !== null,
       alreadyMember: dupMember !== null && dupMember.status !== "deactivated",
     }
@@ -366,6 +373,12 @@ export class WorkspaceInvitationService {
     if (!ws) {
       throw new WorkspaceInvitationError("workspace_not_found", "Workspace no encontrado.")
     }
+    if (!ws.sourceRegistrationIntentPublicId) {
+      throw new WorkspaceInvitationError(
+        "workspace_not_accessible",
+        "El workspace no tiene un origen de registro válido para completar el alta.",
+      )
+    }
 
     const userPublicId = randomUUID()
     const passwordHash = hashIdentityRegistrationIntentPassword(params.password)
@@ -378,7 +391,7 @@ export class WorkspaceInvitationService {
         full_name: fullName,
         password_hash: passwordHash,
         modality_at_signup: ws.modality === "empresa" ? "team" : ws.modality,
-        source_registration_intent_public_id: inv.invitationPublicId,
+        source_registration_intent_public_id: ws.sourceRegistrationIntentPublicId,
         preferred_active_workspace_public_id: inv.workspacePublicId,
         preferred_active_workspace_updated_at: new Date(),
       },
@@ -551,6 +564,10 @@ export class WorkspaceInvitationService {
     if (this.transactionalEmail && ws) {
       const url = buildAcceptUrl(rawToken)
       if (url) {
+        const inviterMember = await this.members.findByWorkspaceAndUserPublicId(
+          workspacePublicId,
+          inv.invitedByUserPublicId,
+        )
         await this.transactionalEmail.sendWorkspaceInvitationSent({
           toEmail: inv.emailNormalized,
           displayName: inv.fullNameProposed,
@@ -558,6 +575,7 @@ export class WorkspaceInvitationService {
           workspaceCode: ws.code,
           roleLabel: roleLabelEs(inv.workspaceRoleAdministrative, inv.workspaceRoleMethodological),
           acceptUrl: url,
+          invitedByDisplayName: inviterMember?.fullName ?? null,
         })
         inv.emailCommsSentAt = new Date()
         inv.updatedAt = new Date()

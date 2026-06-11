@@ -14,6 +14,7 @@ import type {
   IdentityVerificationChallengeRepository,
 } from "../persistence/identity-verification-challenge.repository.js"
 import { RegistrationFlowService } from "./registration-flow.service.js"
+import { hashOtpCodeForStorage } from "./verification-otp.js"
 
 class MemoryIntentRepo implements IdentityRegistrationIntentRepository {
   constructor(public intent: IdentityRegistrationIntent | null) {}
@@ -32,8 +33,19 @@ class MemoryIntentRepo implements IdentityRegistrationIntentRepository {
     throw new Error("unused")
   }
 
-  async updateByPublicId(): Promise<IdentityRegistrationIntent | null> {
-    throw new Error("unused")
+  async updateByPublicId(
+    intentPublicId: string,
+    patch: Partial<
+      Pick<IdentityRegistrationIntent, "status" | "expiresAt" | "updatedAt">
+    >,
+  ): Promise<IdentityRegistrationIntent | null> {
+    if (!this.intent || this.intent.intentPublicId !== intentPublicId) {
+      return null
+    }
+    if (patch.status !== undefined) this.intent.status = patch.status
+    if (patch.expiresAt !== undefined) this.intent.expiresAt = patch.expiresAt
+    this.intent.updatedAt = patch.updatedAt ?? new Date()
+    return structuredClone(this.intent)
   }
 
   async findClaimingWorkspaceCode(): Promise<IdentityRegistrationIntent | null> {
@@ -122,7 +134,94 @@ const stubProvisioning: RegistrationProvisioningPort = {
   },
 }
 
+function buildFlow(
+  intent: IdentityRegistrationIntent,
+  emailSend: TransactionalEmailPort["sendRegistrationVerificationEmail"],
+) {
+  const intents = new MemoryIntentRepo(intent)
+  const challenges = new MemoryChallengeRepo()
+  const email: TransactionalEmailPort = {
+    async sendRegistrationVerificationEmail(args) {
+      return emailSend(args)
+    },
+    async sendRegistrationPaymentConfirmation() {},
+  }
+  const flow = new RegistrationFlowService(
+    intents,
+    challenges,
+    stubAccount,
+    email,
+    stubPayment,
+    stubProvisioning,
+  )
+  return { flow, challenges }
+}
+
 describe("RegistrationFlowService / verification email", () => {
+  it("reutiliza un desafío PENDING vigente si no es reemisión (evita doble OTP)", async () => {
+    const intentPublicId = randomUUID()
+    const now = new Date()
+    const intent: IdentityRegistrationIntent = {
+      intentPublicId,
+      emailNormalized: "reg@test.local",
+      status: "EMAIL_COLLECTED",
+      expiresAt: new Date(now.getTime() + 3600_000),
+      createdAt: now,
+      updatedAt: now,
+    }
+    let sendCount = 0
+    let lastCode = ""
+    const { flow, challenges } = buildFlow(intent, async ({ codeOrLink }) => {
+      sendCount += 1
+      lastCode = codeOrLink
+    })
+
+    const first = await flow.requestVerificationCode(intentPublicId)
+    const second = await flow.requestVerificationCode(intentPublicId)
+
+    assert.equal(first.sent, true)
+    assert.equal(second.sent, true)
+    assert.equal(sendCount, 1)
+    assert.equal(challenges.challenges.filter((c) => c.status === "PENDING").length, 1)
+
+    const confirm = await flow.submitVerificationCode(intentPublicId, lastCode)
+    assert.equal(confirm.verified, true)
+    if (confirm.verified) {
+      assert.equal(confirm.intentStatus, "EMAIL_VERIFIED")
+    }
+  })
+
+  it("con reissue=true invalida el desafío previo y emite uno nuevo", async () => {
+    const intentPublicId = randomUUID()
+    const now = new Date()
+    const intent: IdentityRegistrationIntent = {
+      intentPublicId,
+      emailNormalized: "reg@test.local",
+      status: "EMAIL_COLLECTED",
+      expiresAt: new Date(now.getTime() + 3600_000),
+      createdAt: now,
+      updatedAt: now,
+    }
+    const sentCodes: string[] = []
+    const { flow, challenges } = buildFlow(intent, async ({ codeOrLink }) => {
+      sentCodes.push(codeOrLink)
+    })
+
+    await flow.requestVerificationCode(intentPublicId)
+    await flow.requestVerificationCode(intentPublicId, { reissue: true })
+
+    assert.equal(sentCodes.length, 2)
+    assert.notEqual(sentCodes[0], sentCodes[1])
+    assert.equal(
+      challenges.challenges.filter((c) => c.status === "SUPERSEDED").length,
+      1,
+    )
+
+    const pending = await challenges.findLatestPendingChallengeForIntent(intentPublicId)
+    assert.ok(pending)
+    assert.equal(pending.codeHash, hashOtpCodeForStorage(sentCodes[1]))
+  })
+
   it("si falla el envío del OTP, marca el desafío como EXPIRED y devuelve email_delivery_failed", async () => {
     const intentPublicId = randomUUID()
     const now = new Date()
@@ -134,22 +233,9 @@ describe("RegistrationFlowService / verification email", () => {
       createdAt: now,
       updatedAt: now,
     }
-    const intents = new MemoryIntentRepo(intent)
-    const challenges = new MemoryChallengeRepo()
-    const email: TransactionalEmailPort = {
-      async sendRegistrationVerificationEmail() {
-        throw new Error("resend unavailable")
-      },
-      async sendRegistrationPaymentConfirmation() {},
-    }
-    const flow = new RegistrationFlowService(
-      intents,
-      challenges,
-      stubAccount,
-      email,
-      stubPayment,
-      stubProvisioning,
-    )
+    const { flow, challenges } = buildFlow(intent, async () => {
+      throw new Error("resend unavailable")
+    })
 
     const out = await flow.requestVerificationCode(intentPublicId)
     assert.equal(out.sent, false)

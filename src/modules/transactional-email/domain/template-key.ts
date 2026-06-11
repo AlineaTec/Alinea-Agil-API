@@ -4,6 +4,7 @@ export type TransactionalTemplateKey =
   | "platform_user_security_notice"
   | "registration_verification_otp"
   | "registration_payment_confirmation"
+  | "registration_welcome"
   | "platform_mfa_lockout_notice"
   | "platform_admin_session_started"
   | "workspace_billing_grace_started"

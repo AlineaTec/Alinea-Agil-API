@@ -18,7 +18,10 @@ import type { PlatformUserSecurityNoticeKind } from "../templates/platform-user-
 import { renderPlatformUserSecurityNotice } from "../templates/platform-user-security-notice.template.js"
 import { renderPlatformUserInvited } from "../templates/platform-user-invited.template.js"
 import { renderRegistrationPaymentConfirmation } from "../templates/registration-payment-confirmation.template.js"
+import { renderRegistrationWelcome } from "../templates/registration-welcome.template.js"
 import { renderRegistrationVerificationOtp } from "../templates/registration-verification-otp.template.js"
+import { workspaceAppLoginUrl } from "../../../config/workspace-app-public-url.js"
+import { BRAND_PRODUCT_PUBLIC_URL } from "../templates/layout.js"
 import { renderPlatformAdminPasswordReset } from "../templates/platform-admin-password-reset.template.js"
 import { renderIdentityRegisteredUserPasswordReset } from "../templates/registered-user-password-reset.template.js"
 import { renderWorkspaceMemberAdded } from "../templates/workspace-member-added.template.js"
@@ -142,6 +145,7 @@ export class TransactionalEmailService {
     workspaceCode: string | null
     roleLabel: string
     acceptUrl: string
+    invitedByDisplayName?: string | null
   }): Promise<void> {
     const rendered = renderWorkspaceInvitationSent({
       displayName: params.displayName,
@@ -150,6 +154,7 @@ export class TransactionalEmailService {
       workspaceCode: params.workspaceCode,
       roleLabel: params.roleLabel,
       acceptUrl: params.acceptUrl,
+      invitedByDisplayName: params.invitedByDisplayName,
     })
     await this.dispatch("workspace_invitation_sent", params.toEmail, rendered)
   }
@@ -206,6 +211,25 @@ export class TransactionalEmailService {
       billingCadenceLabel: cadenceLabel(params.billingCadence),
     })
     await this.dispatch("registration_payment_confirmation", params.toNormalizedEmail, rendered)
+  }
+
+  async sendRegistrationWelcome(params: {
+    toNormalizedEmail: string
+    accountFullName: string
+    workspaceDisplayName: string
+    workspaceCode?: string | null
+    planTier?: string
+  }): Promise<void> {
+    const loginUrl = workspaceAppLoginUrl() ?? `${BRAND_PRODUCT_PUBLIC_URL}/login`
+    const rendered = renderRegistrationWelcome({
+      accountFullName: params.accountFullName,
+      loginUrl,
+      workspaceDisplayName: params.workspaceDisplayName,
+      workspaceCode: params.workspaceCode ?? null,
+      planTier: params.planTier,
+      productUrl: BRAND_PRODUCT_PUBLIC_URL,
+    })
+    await this.dispatch("registration_welcome", params.toNormalizedEmail, rendered)
   }
 
   async sendPlatformMfaLockoutNotice(params: {

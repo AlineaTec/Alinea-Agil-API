@@ -10,6 +10,7 @@ import { AuthMeResolutionService } from "./auth-me-resolution.service.js"
 
 const W1 = "10000000-0000-4000-8000-000000000001"
 const W2 = "20000000-0000-4000-8000-000000000002"
+const INTENT_ID = "30000000-0000-4000-8000-000000000003"
 
 class MemMembers implements WorkspaceMemberRepository {
   rows: WorkspaceMemberState[] = []
@@ -138,6 +139,7 @@ test("resolve: un workspace utilizable → workspace resuelto", async () => {
     code: "ws1",
     displayName: "WS Uno",
     modality: "individual",
+    sourceRegistrationIntentPublicId: INTENT_ID,
   })
   const reg = new MemRegistered()
   const svc = new AuthMeResolutionService(members, id, reg, billingStub({ [W1]: true }))
@@ -157,6 +159,7 @@ test("resolve: varios utilizable y preferido válido → mismo preferido", async
       code: w.slice(-2),
       displayName: `WS ${w.slice(-2)}`,
       modality: "individual",
+      sourceRegistrationIntentPublicId: INTENT_ID,
     })
   }
   const reg = new MemRegistered()
@@ -177,6 +180,7 @@ test("resolve: varios utilizable sin preferido válido → requiresWorkspaceSele
       code: w.slice(-2),
       displayName: `WS ${w.slice(-2)}`,
       modality: "individual",
+      sourceRegistrationIntentPublicId: INTENT_ID,
     })
   }
   const reg = new MemRegistered()
@@ -195,6 +199,7 @@ test("resolve: preferido ya no utilizable → previousActiveWorkspaceInvalidated
     code: "ws1",
     displayName: "WS Uno",
     modality: "individual",
+    sourceRegistrationIntentPublicId: INTENT_ID,
   })
   const reg = new MemRegistered()
   reg.preferred.set("user-1", W1)
@@ -214,6 +219,7 @@ test("setPreferredActiveWorkspace: solo permite workspace utilizable", async () 
     code: "ws1",
     displayName: "WS Uno",
     modality: "individual",
+    sourceRegistrationIntentPublicId: INTENT_ID,
   })
   const reg = new MemRegistered()
   const svc = new AuthMeResolutionService(members, id, reg, billingStub({ [W1]: false }))

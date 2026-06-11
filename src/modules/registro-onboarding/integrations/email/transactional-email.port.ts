@@ -18,6 +18,15 @@ export interface TransactionalEmailPort {
     modality?: string
     billingCadence?: string
   }): Promise<void>
+
+  /** Tras activación exitosa del workspace (provisioning completado). */
+  sendRegistrationWelcome(_params: {
+    toNormalizedEmail: string
+    accountFullName: string
+    workspaceDisplayName: string
+    workspaceCode?: string | null
+    planTier?: string
+  }): Promise<void>
 }
 
 export class NoopTransactionalEmail implements TransactionalEmailPort {
@@ -26,6 +35,10 @@ export class NoopTransactionalEmail implements TransactionalEmailPort {
   }
 
   async sendRegistrationPaymentConfirmation(): Promise<void> {
+    /* noop */
+  }
+
+  async sendRegistrationWelcome(): Promise<void> {
     /* noop */
   }
 }

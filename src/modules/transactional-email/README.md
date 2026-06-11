@@ -53,6 +53,8 @@ Los servicios de negocio **no** deben pasar HTML o asunto arbitrarios al transpo
 | `platform_user_security_notice` | Informativo: activación, desactivación o cambio de rol (sin secretos ni enlaces de acción). |
 | `registration_verification_otp` | OTP verificación de correo en registro público. |
 | `registration_payment_confirmation` | Tras pago simulado exitoso del intento. |
+| `registration_welcome` | Bienvenida tras activación/provisioning del workspace (primeros pasos + ayuda contextual). |
+| `workspace_invitation_sent` | Invitación formal a workspace existente (enlace aceptar, rol, invitador). |
 | `platform_mfa_lockout_notice` | Bloqueo temporal por intentos fallidos de TOTP en **enrolamiento** MFA. |
 | `platform_admin_session_started` | Tras **login plataforma exitoso** (nueva sesión): nombre, correo, rol, hora UTC, IP, user-agent, resumen heurístico del cliente, `sessionPublicId` como referencia. |
 
@@ -67,6 +69,8 @@ Asuntos: patrón **«Descripción — Alinea Ágil»** (o equivalente claro). Br
 | Lockout MFA en `completeMfaEnrollment` | `platform_mfa_lockout_notice` | Se envía al activar el bloqueo. **Login** con cuenta ya bloqueada (`reason: locked`) **no** reenvía correo (evita spam en cada intento). |
 | Solicitar OTP registro | `registration_verification_otp` | Si el envío falla: desafío nuevo → **EXPIRED**, respuesta `email_delivery_failed`; cliente puede llamar de nuevo a `/verification/request`. |
 | Pago simulado OK registro | `registration_payment_confirmation` | Error de envío: **no** revierte el estado de pago; ledger + log. |
+| Activación registro (`POST /activate`) | `registration_welcome` | Tras provisioning exitoso; fallo de envío **no** revierte activación. Requiere `WORKSPACE_APP_PUBLIC_BASE_URL` para enlace de login (fallback: sitio público). |
+| Invitar miembro workspace | `workspace_invitation_sent` | Incluye nombre del invitador si está en el workspace; reenvío usa la misma plantilla. |
 | Login plataforma `POST /v1/platform/auth/login` | `platform_admin_session_started` | Solo si el login termina en **nueva sesión** persistida. IP y `User-Agent` desde la petición (`platform-users/http/request-client-context.ts`). **Un correo por login exitoso** (no en `resolve`, `/me`, ni `logout`). Fallo de envío: **no** revoca el token; ledger + log. |
 | Recuperación contraseña plataforma | `platform_admin_password_reset` | `POST /v1/platform/auth/password-reset/request` → enlace con `PLATFORM_ADMIN_PUBLIC_BASE_URL`. Fallo de envío: token emitido se revierte; HTTP sigue respondiendo genérico en request. |
 
@@ -81,7 +85,7 @@ Asuntos: patrón **«Descripción — Alinea Ágil»** (o equivalente claro). Br
 ## URLs públicas en correos
 
 - **Único origen configurado hoy:** `PLATFORM_ADMIN_PUBLIC_BASE_URL` → `getPlatformAdminPublicBaseUrl()` → plantillas `platform-user-invited.template.ts` y `platform-admin-password-reset.template.ts`.
-- Registro/onboarding: copy de “activar desde la aplicación” **sin** URL configurable en v1 (evita hardcodear `localhost`).
+- Cliente workspace: `WORKSPACE_APP_PUBLIC_BASE_URL` → login (`/login`) en `registration_welcome` y aceptación de invitaciones (`/app/workspace/invitations/accept`).
 
 ## Errores, ledger y política por flujo
 

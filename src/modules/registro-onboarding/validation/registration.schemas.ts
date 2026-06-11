@@ -28,6 +28,8 @@ export type EmailEligibilityBody = z.infer<typeof emailEligibilityBodySchema>
 /** POST /verification/request — OP-B1 / reemisión preparada (supersede). */
 export const verificationRequestBodySchema = z.object({
   intentPublicId: z.string().uuid(),
+  /** `true` invalida el desafío PENDING vigente y emite uno nuevo (reenvío explícito). */
+  reissue: z.boolean().optional().default(false),
 })
 
 export type VerificationRequestBody = z.infer<typeof verificationRequestBodySchema>

@@ -40,6 +40,21 @@ describe("TransactionalEmailService", () => {
     assert.equal(ledger.records[0].templateKey, "registration_verification_otp")
   })
 
+  it("envía bienvenida de registro tras activación", async () => {
+    const transport = new MockTransport()
+    const ledger = new MemoryLedger()
+    const svc = new TransactionalEmailService(transport, "agil@mail.alineatec.com", ledger)
+    await svc.sendRegistrationWelcome({
+      toNormalizedEmail: "ana@example.com",
+      accountFullName: "Ana",
+      workspaceDisplayName: "Mi workspace",
+      workspaceCode: "mi-ws",
+      planTier: "estandar",
+    })
+    assert.equal(ledger.records[0]?.templateKey, "registration_welcome")
+    assert.match(transport.payloads[0]?.subject ?? "", /Bienvenido/i)
+  })
+
   it("rechaza destinatario inválido", async () => {
     const transport = new MockTransport()
     const ledger = new MemoryLedger()

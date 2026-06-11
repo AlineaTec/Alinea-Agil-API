@@ -8,6 +8,8 @@ import { summarizeClientForEmail } from "../util/user-agent-summary.js"
 import { renderPlatformAdminSessionStarted } from "./platform-admin-session-started.template.js"
 import { renderRegistrationVerificationOtp } from "./registration-verification-otp.template.js"
 import { renderWorkspaceMemberAdded } from "./workspace-member-added.template.js"
+import { renderRegistrationWelcome } from "./registration-welcome.template.js"
+import { renderWorkspaceInvitationSent } from "./workspace-invitation-sent.template.js"
 
 describe("transactional email templates", () => {
   it("miembro workspace añadido — enlaces login y registro", () => {
@@ -100,6 +102,36 @@ describe("transactional email templates", () => {
     assert.match(r.text, /203\.0\.113\.1/)
     assert.match(r.text, /Firefox/)
     assert.match(r.html, /ana@test\.local/)
+  })
+
+  it("bienvenida registro — CTA login y pasos de ayuda", () => {
+    const r = renderRegistrationWelcome({
+      accountFullName: "Ana López",
+      loginUrl: "https://web.agil.alineatec.com/login",
+      workspaceDisplayName: "Acme Delivery",
+      workspaceCode: "acme",
+      planTier: "gratis",
+    })
+    assert.match(r.subject, /Bienvenido/i)
+    assert.match(r.html, /Iniciar sesión/)
+    assert.match(r.text, /Ayuda/)
+    assert.match(r.html, /acme/)
+  })
+
+  it("invitación workspace — menciona invitador y botón aceptar", () => {
+    const r = renderWorkspaceInvitationSent({
+      displayName: "Bob",
+      invitedEmail: "bob@test.local",
+      workspaceDisplayName: "Acme",
+      workspaceCode: "acme",
+      roleLabel: "Scrum Master",
+      acceptUrl: "https://web.agil.alineatec.com/app/workspace/invitations/accept?token=abc",
+      invitedByDisplayName: "María García",
+    })
+    assert.match(r.subject, /María García/)
+    assert.match(r.html, /aceptar invitación/i)
+    assert.match(r.text, /7 días/)
+    assert.doesNotMatch(r.html, /<script>/i)
   })
 
   it("confirmación pago incluye referencia de intent", () => {

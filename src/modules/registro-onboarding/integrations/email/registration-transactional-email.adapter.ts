@@ -29,4 +29,14 @@ export class RegistrationTransactionalEmailAdapter implements TransactionalEmail
   }): Promise<void> {
     await this.inner.sendRegistrationPaymentConfirmation(params)
   }
+
+  async sendRegistrationWelcome(params: {
+    toNormalizedEmail: string
+    accountFullName: string
+    workspaceDisplayName: string
+    workspaceCode?: string | null
+    planTier?: string
+  }): Promise<void> {
+    await this.inner.sendRegistrationWelcome(params)
+  }
 }
