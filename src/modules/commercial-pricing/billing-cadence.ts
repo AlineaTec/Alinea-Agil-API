@@ -10,3 +10,11 @@ export const ACTIVE_BILLING_CADENCE: ActiveBillingCadence = "monthly"
 export function resolveActiveBillingCadence(_input?: string | null): ActiveBillingCadence {
   return ACTIVE_BILLING_CADENCE
 }
+
+/** Lectura histórica: filas legacy `annual` se tratan como mensual en runtime. */
+export function normalizeStoredBillingCadence(
+  cadence: StoredBillingCadence | null | undefined,
+): ActiveBillingCadence | undefined {
+  if (cadence === "monthly" || cadence === "annual") return ACTIVE_BILLING_CADENCE
+  return undefined
+}

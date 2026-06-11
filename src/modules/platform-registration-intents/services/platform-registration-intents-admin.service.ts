@@ -1,6 +1,7 @@
 import type { IdentityRegistrationIntentStatus, Prisma, PrismaClient } from "@prisma/client"
 import type { PlatformSessionContext } from "../../platform-users/domain/platform-session.context.js"
 import type { PlatformAuditService } from "../../platform-users/services/platform-audit.service.js"
+import { normalizeStoredBillingCadence } from "../../commercial-pricing/billing-cadence.js"
 import type { IdentityRegistrationIntentPersisted } from "../../registro-onboarding/persistence/mappers/registration-intent.mapper.js"
 import { PlatformIdentityRegistrationIntentsDeletionBlockedError } from "../domain/platform-registration-intents.errors.js"
 import {
@@ -126,7 +127,7 @@ export class PlatformIdentityRegistrationIntentsAdminService {
         modality: (r.modality ?? undefined) as IdentityRegistrationIntentPersisted["modality"],
         workspaceDisplayName: r.workspace_display_name ?? undefined,
         workspaceCode: r.workspace_code ?? undefined,
-        billingCadence: r.billing_cadence ?? undefined,
+        billingCadence: normalizeStoredBillingCadence(r.billing_cadence ?? undefined),
         teamSeatsPurchased: r.team_seats_purchased ?? undefined,
         paymentProviderRef: r.payment_provider_ref ?? undefined,
         provisionedUserPublicId: r.provisioned_user_public_id ?? undefined,

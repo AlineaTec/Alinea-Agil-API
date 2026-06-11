@@ -35,10 +35,8 @@ function modalityLabel(modality: string | undefined): string {
   return modality ?? "—"
 }
 
-function cadenceLabel(cadence: string | undefined): string {
-  if (cadence === "annual") return "Anual"
-  if (cadence === "monthly") return "Mensual"
-  return cadence ?? "—"
+function cadenceLabel(_cadence: string | undefined): string {
+  return "Mensual"
 }
 
 function resolveEmailTransport(): EmailTransport {

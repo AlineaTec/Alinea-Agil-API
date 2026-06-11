@@ -5,19 +5,40 @@ export {
   ADDITIONAL_SEAT_MONTHLY_USD,
   TEAM_SEAT_MONTHLY_USD,
   TEAM_MIN_SEATS,
-  ANNUAL_DISCOUNT_RATE_DEFAULT,
-  ANNUAL_DISCOUNT_RATE_CAP,
+  LEGACY_TEAM_MIN_SEATS,
+  GRATIS_TIER_MAX_SEATS,
+  GRATIS_TIER_MAX_ACTIVE_PROJECTS,
+  ESTANDAR_TIER_LICENSE_MONTHLY_USD,
+  PROFESIONAL_TIER_LICENSE_MONTHLY_USD,
+  PAID_TIER_MIN_LICENSES,
+  ALINEA_PLAN_TIERS,
+  COMMERCIAL_PLAN_TIERS,
+  type CommercialPlanTier,
   type BillingCadence,
   type CommercialPlanKind,
 } from "./commercial-pricing.constants.js"
-export { getAnnualDiscountRate } from "./annual-discount-rate.js"
+export {
+  ACTIVE_BILLING_CADENCE,
+  resolveActiveBillingCadence,
+  type ActiveBillingCadence,
+  type StoredBillingCadence,
+} from "./billing-cadence.js"
+export { maxActiveProjectsForPlanTier, maxUsersForPlanTier } from "./alinea-plan-catalog.js"
 export {
   computeCommercialQuote,
   effectiveTeamSeatsPurchased,
+  effectiveLegacyTeamSeatsPurchased,
+  effectivePaidTierSeats,
   monthlyListPriceUsd,
   seatsForNewWorkspaceFromIntent,
   type CommercialQuote,
 } from "./compute-commercial-quote.js"
+export {
+  assertCanAddActiveProject,
+  inferPlanTierFromWorkspaceContext,
+  WorkspaceActiveProjectLimitError,
+} from "./workspace-plan-limits.policy.js"
+export { WorkspacePlanContextService } from "./workspace-plan-context.service.js"
 export {
   computeManagedWorkspaceCommercial,
   describeManagedWorkspaceCommercialEs,

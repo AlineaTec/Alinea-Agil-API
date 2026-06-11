@@ -2,16 +2,25 @@ import { Router, type Request, type RequestHandler, type Response, type NextFunc
 import { commercialRegistrationApiGate } from "../../../config/payment-gateway-policy.js"
 import { ensureTurnstileForRequest } from "../../../infra/turnstile/ensure-turnstile-for-request.js"
 import { computeCommercialQuote } from "../../commercial-pricing/compute-commercial-quote.js"
-import { getAnnualDiscountRate } from "../../commercial-pricing/annual-discount-rate.js"
+import {
+  buildPaddleSubscriptionCheckoutLines,
+  presentPaddleCheckoutLines,
+} from "../../commercial-pricing/paddle-checkout-lines.js"
+import { loadPaddlePriceCatalogFromEnv } from "../../commercial-pricing/paddle-price-catalog.js"
 import {
   ADDITIONAL_SEAT_MONTHLY_USD,
-  ANNUAL_DISCOUNT_RATE_CAP,
-  ANNUAL_DISCOUNT_RATE_DEFAULT,
+  ALINEA_PLAN_TIERS,
   COMMERCIAL_CURRENCY,
+  COMMERCIAL_PLAN_TIERS,
+  GRATIS_TIER_MAX_ACTIVE_PROJECTS,
+  GRATIS_TIER_MAX_SEATS,
   INDIVIDUAL_MONTHLY_USD,
+  PAID_TIER_MIN_LICENSES,
+  PROFESIONAL_TIER_LICENSE_MONTHLY_USD,
   TEAM_BASE_MONTHLY_USD,
   TEAM_MIN_SEATS,
   TEAM_SEAT_MONTHLY_USD,
+  ESTANDAR_TIER_LICENSE_MONTHLY_USD,
 } from "../../commercial-pricing/commercial-pricing.constants.js"
 import { normalizeWorkspaceModality } from "../domain/workspace-modality.js"
 import type { CommercialPlanTier } from "../../commercial-pricing/commercial-pricing.constants.js"
@@ -19,6 +28,7 @@ import type { RegistrationFlowService } from "../services/registration-flow.serv
 import {
   activateRegistrationBodySchema,
   commercialQuoteBodySchema,
+  paddleCheckoutLinesBodySchema,
   confirmFreePlanPaymentBodySchema,
   confirmPaddlePaymentBodySchema,
   confirmSimulatedPaymentBodySchema,
@@ -70,16 +80,25 @@ export function createRegistrationPublicRouter(
     try {
       res.status(200).json({
         currency: COMMERCIAL_CURRENCY,
+        planTiers: COMMERCIAL_PLAN_TIERS.map((id) => ({
+          id,
+          pricePerLicenseMonthlyUsd: ALINEA_PLAN_TIERS[id].pricePerLicenseMonthlyUsd,
+          minLicenses: ALINEA_PLAN_TIERS[id].minLicenses,
+          maxUsers: ALINEA_PLAN_TIERS[id].maxUsers,
+          maxActiveProjects: ALINEA_PLAN_TIERS[id].maxActiveProjects,
+        })),
+        freeTierMaxSeats: GRATIS_TIER_MAX_SEATS,
+        freeTierMaxActiveProjects: GRATIS_TIER_MAX_ACTIVE_PROJECTS,
+        teamTierLicenseMonthlyUsd: ESTANDAR_TIER_LICENSE_MONTHLY_USD,
+        proTierLicenseMonthlyUsd: PROFESIONAL_TIER_LICENSE_MONTHLY_USD,
+        paidTierMinLicenses: PAID_TIER_MIN_LICENSES,
+        /** @deprecated Modelo Paddle legado — preferir `planTiers`. */
         individualMonthlyUsd: INDIVIDUAL_MONTHLY_USD,
         teamBaseMonthlyUsd: TEAM_BASE_MONTHLY_USD,
         additionalSeatMonthlyUsd: ADDITIONAL_SEAT_MONTHLY_USD,
-        /** @deprecated Preferir `additionalSeatMonthlyUsd` — mismo valor; nombre legado. */
         teamSeatMonthlyUsd: TEAM_SEAT_MONTHLY_USD,
         teamMinSeats: TEAM_MIN_SEATS,
         teamIncludedSeats: TEAM_MIN_SEATS,
-        annualDiscountRateDefault: ANNUAL_DISCOUNT_RATE_DEFAULT,
-        annualDiscountRateCap: ANNUAL_DISCOUNT_RATE_CAP,
-        annualDiscountRateApplied: getAnnualDiscountRate(),
       })
     } catch (err) {
       next(err)
@@ -95,7 +114,7 @@ export function createRegistrationPublicRouter(
           res.status(400).json({
             error: "invalid_request",
             message:
-              'Se espera JSON { "planTier"?: "free" | "team" | "pro", "modality"?: "individual" | "team" | "empresa", "billingCadence": "monthly", "teamSeatsPurchased"?: number }.',
+              'Se espera JSON { "planTier"?: "gratis" | "estandar" | "profesional", "modality"?: "individual" | "team" | "empresa", "billingCadence": "monthly", "teamSeatsPurchased"?: number }.',
             details: parsed.error.flatten(),
           })
           return
@@ -103,7 +122,7 @@ export function createRegistrationPublicRouter(
         const planTier = parsed.data.planTier as CommercialPlanTier | undefined
         const modality =
           planTier !== undefined
-            ? planTier === "free"
+            ? planTier === "gratis"
               ? "individual"
               : "team"
             : normalizeWorkspaceModality(parsed.data.modality ?? "team")
@@ -122,6 +141,84 @@ export function createRegistrationPublicRouter(
           planTier,
         })
         res.status(200).json(quote)
+      } catch (err) {
+        next(err)
+      }
+    },
+  )
+
+  router.post(
+    "/paddle-checkout-lines",
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const parsed = paddleCheckoutLinesBodySchema.safeParse(req.body)
+        if (!parsed.success) {
+          res.status(400).json({
+            error: "invalid_request",
+            message:
+              'Se espera JSON { "planTier"?: "gratis" | "estandar" | "profesional", "modality"?: "individual" | "team" | "empresa", "billingCadence": "monthly", "teamSeatsPurchased"?: number }.',
+            details: parsed.error.flatten(),
+          })
+          return
+        }
+
+        const catalog = loadPaddlePriceCatalogFromEnv()
+        if (!catalog) {
+          res.status(503).json({
+            error: "commercial_catalog_not_configured",
+            message:
+              "Catálogo Paddle no configurado. Define PADDLE_PRICE_ESTANDAR_LICENSE_MONTHLY y PADDLE_PRICE_PROFESIONAL_LICENSE_MONTHLY (o el modelo legado base+addon).",
+          })
+          return
+        }
+
+        const planTier = parsed.data.planTier as CommercialPlanTier | undefined
+        const modality =
+          planTier !== undefined
+            ? planTier === "gratis"
+              ? "individual"
+              : "team"
+            : normalizeWorkspaceModality(parsed.data.modality ?? "team")
+        if (!modality) {
+          res.status(400).json({
+            error: "invalid_request",
+            message: "modalidad no válida",
+          })
+          return
+        }
+
+        const quote = computeCommercialQuote({
+          plan: modality,
+          billingCadence: parsed.data.billingCadence,
+          teamSeatsRequested:
+            modality === "team" ? parsed.data.teamSeatsPurchased : undefined,
+          planTier,
+        })
+
+        const built = buildPaddleSubscriptionCheckoutLines({
+          plan: modality,
+          billingCadence: parsed.data.billingCadence,
+          teamSeatsRequested:
+            modality === "team" ? parsed.data.teamSeatsPurchased : undefined,
+          planTier,
+          catalog,
+        })
+
+        if (!built.ok) {
+          const message =
+            built.reason === "tier_required"
+              ? "Para el catálogo por licencia se requiere planTier estandar o profesional."
+              : built.reason === "empty_catalog"
+                ? "No se pudieron resolver price_id para este checkout."
+                : "No se pudo construir el checkout Paddle."
+          res.status(400).json({ error: built.reason, message })
+          return
+        }
+
+        res.status(200).json({
+          quote,
+          lines: presentPaddleCheckoutLines(built.lines, catalog),
+        })
       } catch (err) {
         next(err)
       }
@@ -227,7 +324,7 @@ export function createRegistrationPublicRouter(
           res.status(400).json({
             error: "invalid_request",
             message:
-              'Se espera JSON { "intentPublicId": string (UUID), "planTier"?: "free" | "team" | "pro", "modality"?: "individual" | "team" | "empresa", "billingCadence"?: "monthly", "teamSeatsPurchased"?: number }.',
+              'Se espera JSON { "intentPublicId": string (UUID), "planTier"?: "gratis" | "estandar" | "profesional", "modality"?: "individual" | "team" | "empresa", "billingCadence"?: "monthly", "teamSeatsPurchased"?: number }.',
             details: parsed.error.flatten(),
           })
           return

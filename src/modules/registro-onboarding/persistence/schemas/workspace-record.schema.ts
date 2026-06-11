@@ -11,6 +11,6 @@ export interface WorkspaceRecordDocProps {
   /** Persistido; puede ser legado `empresa`. */
   modality: WorkspaceModality | "empresa"
   /** Modalidad de facturación elegida en alta (si aplica). */
-  billingCadence?: "monthly" | "annual"
+  billingCadence?: "monthly"
   sourceRegistrationIntentPublicId: string
 }

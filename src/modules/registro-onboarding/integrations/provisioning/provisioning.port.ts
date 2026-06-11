@@ -11,7 +11,7 @@ export type PaidRegistrationProvisionPayload = {
   accountFullName: string
   passwordHash: string
   modality: WorkspaceModality
-  billingCadence: "monthly" | "annual"
+  billingCadence: "monthly"
   /** Tier comercial Gratis / Equipo / Pro cuando aplica. */
   planTier?: CommercialPlanTier
   /** Asientos contratados Team (si aplica); Individual sin uso. */

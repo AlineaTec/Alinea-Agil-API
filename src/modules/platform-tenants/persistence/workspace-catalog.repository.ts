@@ -5,7 +5,7 @@ export type WorkspaceCatalogRow = {
   code: string
   displayName: string
   modality: WorkspaceModality
-  billingCadence?: "monthly" | "annual"
+  billingCadence?: "monthly"
   createdAt: Date
   updatedAt: Date
 }

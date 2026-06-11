@@ -6,27 +6,32 @@ import type {
 import {
   ADDITIONAL_SEAT_MONTHLY_USD,
   COMMERCIAL_CURRENCY,
-  FREE_TIER_MAX_SEATS,
+  GRATIS_TIER_MAX_SEATS,
   INDIVIDUAL_MONTHLY_USD,
+  LEGACY_TEAM_MIN_SEATS,
   PAID_TIER_MIN_LICENSES,
-  PRO_TIER_LICENSE_MONTHLY_USD,
+  ESTANDAR_TIER_LICENSE_MONTHLY_USD,
+  PROFESIONAL_TIER_LICENSE_MONTHLY_USD,
   TEAM_BASE_MONTHLY_USD,
-  TEAM_MIN_SEATS,
-  TEAM_TIER_LICENSE_MONTHLY_USD,
 } from "./commercial-pricing.constants.js"
+import { ACTIVE_BILLING_CADENCE } from "./billing-cadence.js"
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-/** Asientos facturables Team tras aplicar mínimo (modelo legado o tier de pago). */
-export function effectiveTeamSeatsPurchased(requestedSeats: number): number {
+/** Asientos facturables Team en modelo Paddle legado (mín. 3). */
+export function effectiveLegacyTeamSeatsPurchased(requestedSeats: number): number {
   const n = Math.floor(Number(requestedSeats))
-  if (!Number.isFinite(n)) return TEAM_MIN_SEATS
-  return Math.max(TEAM_MIN_SEATS, n)
+  if (!Number.isFinite(n)) return LEGACY_TEAM_MIN_SEATS
+  return Math.max(LEGACY_TEAM_MIN_SEATS, n)
 }
 
-function effectivePaidTierSeats(requestedSeats: number | undefined): number {
+/** @deprecated Alias de `effectiveLegacyTeamSeatsPurchased` (Paddle v1). */
+export const effectiveTeamSeatsPurchased = effectiveLegacyTeamSeatsPurchased
+
+/** Licencias en planes de pago Equipo / Pro (mín. 1). */
+export function effectivePaidTierSeats(requestedSeats: number | undefined): number {
   const n = Math.floor(Number(requestedSeats))
   if (!Number.isFinite(n)) return PAID_TIER_MIN_LICENSES
   return Math.max(PAID_TIER_MIN_LICENSES, n)
@@ -34,7 +39,7 @@ function effectivePaidTierSeats(requestedSeats: number | undefined): number {
 
 export function monthlyListPriceUsd(plan: CommercialPlanKind, seatsBilled: number): number {
   if (plan === "individual") return INDIVIDUAL_MONTHLY_USD
-  const additionalSeats = Math.max(0, seatsBilled - TEAM_MIN_SEATS)
+  const additionalSeats = Math.max(0, seatsBilled - LEGACY_TEAM_MIN_SEATS)
   return roundMoney(TEAM_BASE_MONTHLY_USD + additionalSeats * ADDITIONAL_SEAT_MONTHLY_USD)
 }
 
@@ -42,27 +47,27 @@ function monthlyListForPlanTier(
   planTier: CommercialPlanTier,
   seatsBilled: number,
 ): number {
-  if (planTier === "free") return 0
+  if (planTier === "gratis") return 0
   const perLicense =
-    planTier === "pro" ? PRO_TIER_LICENSE_MONTHLY_USD : TEAM_TIER_LICENSE_MONTHLY_USD
+    planTier === "profesional"
+      ? PROFESIONAL_TIER_LICENSE_MONTHLY_USD
+      : ESTANDAR_TIER_LICENSE_MONTHLY_USD
   return roundMoney(perLicense * seatsBilled)
 }
 
 export type CommercialQuote = {
   currency: typeof COMMERCIAL_CURRENCY
   plan: CommercialPlanKind
-  /** Tier comercial cuando el registro usa Gratis / Equipo / Pro. */
+  /** Tier comercial cuando el registro usa Gratis / Estándar / Profesional. */
   planTier?: CommercialPlanTier
   billingCadence: BillingCadence
   seatsBilled: number
-  /** Precio de lista por mes (antes de prorratear anual). */
+  /** Precio de lista por mes. */
   monthlyListUsd: number
-  /** Meses facturados en este cobro (1 o 12). */
+  /** Meses facturados en este cobro (siempre 1). */
   periodMonths: number
-  /** Subtotal lista antes de descuento (monthlyList × periodMonths). */
+  /** Subtotal lista (monthlyList × periodMonths). */
   subtotalListUsd: number
-  annualDiscountRate: number
-  discountUsd: number
   totalDueUsd: number
   /** Total / meses del periodo (útil para UI). */
   equivalentMonthlyUsd: number
@@ -73,7 +78,7 @@ export function computeCommercialQuote(input: {
   billingCadence: BillingCadence
   /** Solo Team; se ignora en Individual. */
   teamSeatsRequested?: number
-  /** Cuando viene del registro con catálogo Gratis / Equipo / Pro. */
+  /** Cuando viene del registro con catálogo Gratis / Estándar / Profesional. */
   planTier?: CommercialPlanTier
 }): CommercialQuote {
   const planTier = input.planTier
@@ -82,11 +87,11 @@ export function computeCommercialQuote(input: {
   let monthlyListUsd: number
   let plan = input.plan
 
-  if (planTier === "free") {
-    seatsBilled = FREE_TIER_MAX_SEATS
+  if (planTier === "gratis") {
+    seatsBilled = GRATIS_TIER_MAX_SEATS
     monthlyListUsd = 0
     plan = "individual"
-  } else if (planTier === "team" || planTier === "pro") {
+  } else if (planTier === "estandar" || planTier === "profesional") {
     seatsBilled = effectivePaidTierSeats(input.teamSeatsRequested)
     monthlyListUsd = monthlyListForPlanTier(planTier, seatsBilled)
     plan = "team"
@@ -94,28 +99,24 @@ export function computeCommercialQuote(input: {
     seatsBilled =
       input.plan === "individual"
         ? 1
-        : effectiveTeamSeatsPurchased(input.teamSeatsRequested ?? TEAM_MIN_SEATS)
+        : effectiveLegacyTeamSeatsPurchased(input.teamSeatsRequested ?? LEGACY_TEAM_MIN_SEATS)
     monthlyListUsd = monthlyListPriceUsd(input.plan, seatsBilled)
   }
 
   const periodMonths = 1
   const subtotalListUsd = roundMoney(monthlyListUsd * periodMonths)
-  const annualDiscountRate = 0
-  const discountUsd = 0
-  const totalDueUsd = roundMoney(subtotalListUsd - discountUsd)
+  const totalDueUsd = subtotalListUsd
   const equivalentMonthlyUsd = roundMoney(totalDueUsd / periodMonths)
 
   return {
     currency: COMMERCIAL_CURRENCY,
     plan,
     ...(planTier !== undefined ? { planTier } : {}),
-    billingCadence: "monthly",
+    billingCadence: ACTIVE_BILLING_CADENCE,
     seatsBilled,
     monthlyListUsd,
     periodMonths,
     subtotalListUsd,
-    annualDiscountRate,
-    discountUsd,
     totalDueUsd,
     equivalentMonthlyUsd,
   }
@@ -126,10 +127,10 @@ export function seatsForNewWorkspaceFromIntent(input: {
   teamSeatsPurchased?: number
   planTier?: CommercialPlanTier
 }): number {
-  if (input.planTier === "free") return FREE_TIER_MAX_SEATS
-  if (input.planTier === "team" || input.planTier === "pro") {
+  if (input.planTier === "gratis") return GRATIS_TIER_MAX_SEATS
+  if (input.planTier === "estandar" || input.planTier === "profesional") {
     return effectivePaidTierSeats(input.teamSeatsPurchased)
   }
   if (input.modality === "individual") return 1
-  return effectiveTeamSeatsPurchased(input.teamSeatsPurchased ?? TEAM_MIN_SEATS)
+  return effectiveLegacyTeamSeatsPurchased(input.teamSeatsPurchased ?? LEGACY_TEAM_MIN_SEATS)
 }

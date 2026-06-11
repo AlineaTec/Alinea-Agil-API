@@ -13,6 +13,7 @@ import type { VerificationRequestResponse } from "../dto/verification-request.dt
 import type { IdentityRegistrationIntent } from "../domain/registration-intent.entity.js"
 import type { WorkspaceModality } from "../domain/workspace-modality.js"
 import type { BillingCadence } from "../../commercial-pricing/commercial-pricing.constants.js"
+import { resolveActiveBillingCadence } from "../../commercial-pricing/billing-cadence.js"
 import type { CommercialPlanTier } from "../../commercial-pricing/commercial-pricing.constants.js"
 import {
   planTierFromPlanSku,
@@ -20,7 +21,8 @@ import {
 import type { CommercialQuote } from "../../commercial-pricing/compute-commercial-quote.js"
 import {
   computeCommercialQuote,
-  effectiveTeamSeatsPurchased,
+  effectivePaidTierSeats,
+  effectiveLegacyTeamSeatsPurchased,
 } from "../../commercial-pricing/compute-commercial-quote.js"
 import {
   getWorkspaceCodeFormatIssue,
@@ -81,7 +83,7 @@ function commercialQuoteForIntent(intent: IdentityRegistrationIntent): Commercia
   const planTier = planTierFromPlanSku(intent.planSku)
   return computeCommercialQuote({
     plan: intent.modality,
-    billingCadence: intent.billingCadence ?? "monthly",
+    billingCadence: resolveActiveBillingCadence(intent.billingCadence),
     teamSeatsRequested:
       intent.modality === "team" ? intent.teamSeatsPurchased : undefined,
     planTier,
@@ -89,7 +91,7 @@ function commercialQuoteForIntent(intent: IdentityRegistrationIntent): Commercia
 }
 
 function modalityForPlanTier(planTier: CommercialPlanTier): WorkspaceModality {
-  return planTier === "free" ? "individual" : "team"
+  return planTier === "gratis" ? "individual" : "team"
 }
 
 function paddleTransactionIdFromIntent(intent: IdentityRegistrationIntent): string | null {
@@ -351,7 +353,9 @@ export class RegistrationFlowService {
     const billingCadence = "monthly" as const
     const teamSeatsStored =
       modality === "team"
-        ? effectiveTeamSeatsPurchased(input.teamSeatsRequested ?? 3)
+        ? planTier === "estandar" || planTier === "profesional"
+          ? effectivePaidTierSeats(input.teamSeatsRequested)
+          : effectiveLegacyTeamSeatsPurchased(input.teamSeatsRequested ?? 1)
         : undefined
 
     const patch = {
@@ -685,7 +689,7 @@ export class RegistrationFlowService {
       return { ok: false, reason: "invalid_intent_state" }
     }
 
-    if (planTierFromPlanSku(intent.planSku) !== "free") {
+    if (planTierFromPlanSku(intent.planSku) !== "gratis") {
       return { ok: false, reason: "invalid_intent_state" }
     }
 

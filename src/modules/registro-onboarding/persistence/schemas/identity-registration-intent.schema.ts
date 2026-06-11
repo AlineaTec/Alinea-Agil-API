@@ -21,7 +21,7 @@ export interface IdentityRegistrationIntentDocProps {
   provisionedWorkspacePublicId?: string
   provisionedAt?: Date
   planSku?: string
-  billingCadence?: "monthly" | "annual"
+  billingCadence?: "monthly"
   /** Asientos contratados para Team (mín. 3 en facturación); Individual ignora. */
   teamSeatsPurchased?: number
   paymentProviderRef?: string

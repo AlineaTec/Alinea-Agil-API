@@ -33,6 +33,13 @@ import {
 import type { ProjectDraftRepository } from "../persistence/project-draft.repository.js"
 import { runWithTransactionPreferred } from "../persistence/run-preferred-transaction.js"
 import { buildStubRecommendationResult } from "./project-draft-recommendation-stub.js"
+import type { WorkspacePlanContextService } from "../../commercial-pricing/workspace-plan-context.service.js"
+import {
+  assertCanAddActiveProject,
+  WorkspaceActiveProjectLimitError,
+} from "../../commercial-pricing/workspace-plan-limits.policy.js"
+
+export { WorkspaceActiveProjectLimitError }
 
 /** Validación de dominio: cadenas vacías; el wizard permite crear sin nombre hasta el charter. */
 const DEFAULT_PROJECT_DRAFT_DISPLAY_NAME = "Sin nombre"
@@ -57,6 +64,7 @@ export class ProjectDraftService {
     private readonly repo: ProjectDraftRepository,
     private readonly projectRuntimeService: ProjectRuntimeService,
     private readonly kanbanFlowService: KanbanFlowService,
+    private readonly workspacePlanContext: WorkspacePlanContextService | null = null,
   ) {}
 
   async createDraft(input: {
@@ -326,6 +334,14 @@ export class ProjectDraftService {
     }
 
     assertCanMaterialize(draft)
+
+    if (this.workspacePlanContext) {
+      const [planTier, activeProjects] = await Promise.all([
+        this.workspacePlanContext.resolvePlanTier(workspacePublicId),
+        this.workspacePlanContext.countActiveProjects(workspacePublicId),
+      ])
+      assertCanAddActiveProject({ planTier, currentActiveProjects: activeProjects })
+    }
 
     draft.materialization = {
       ...draft.materialization,

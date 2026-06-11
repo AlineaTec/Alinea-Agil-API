@@ -25,7 +25,7 @@ export type PlatformBillingTenantCommercialRow = {
   platformTenantStatus: PlatformTenantStatus | null
   commercialLineStatus: "ok" | "incomplete"
   incompleteReason?: CommercialLineIncompleteReason
-  billingCadenceResolved?: "monthly" | "annual"
+  billingCadenceResolved?: "monthly"
   billingCadenceAssumedMonthly?: boolean
   seatsContracted?: number
   quote: CommercialQuote | null
@@ -44,7 +44,7 @@ export type PlatformBillingSummary = {
   /** Nota para evitar confusión con facturación legal / ERP. */
   scopeNote: string
   mrrUsd: number
-  /** Convencion SaaS: ARR = MRR x 12 (equiv. mensual ya amortiza anual con descuento). */
+  /** Convención SaaS: ARR = MRR × 12. */
   arrUsd: number
   workspaceCount: number
   tenantsIncompleteCommercial: number
@@ -57,12 +57,10 @@ export type PlatformBillingSummary = {
   }
   cadenceActiveBillable: {
     monthly: number
-    annual: number
   }
   /** Suma de `quote.seatsBilled` solo tenants activos cotizables. */
   seatsBilledAggregateActive: number
   mrrContributionMonthlyCadenceUsd: number
-  mrrContributionAnnualCadenceUsd: number
 }
 
 function buildRow(
@@ -173,9 +171,8 @@ function summarize(rows: PlatformBillingTenantCommercialRow[]): PlatformBillingS
   let suspendedWithQuoteCount = 0
   let seatsBilledAggregateActive = 0
   let mrrContributionMonthlyCadenceUsd = 0
-  let mrrContributionAnnualCadenceUsd = 0
   const planActiveBillable = { individual: 0, team: 0 }
-  const cadenceActiveBillable = { monthly: 0, annual: 0 }
+  const cadenceActiveBillable = { monthly: 0 }
 
   for (const r of rows) {
     if (r.commercialLineStatus !== "ok") {
@@ -191,13 +188,8 @@ function summarize(rows: PlatformBillingTenantCommercialRow[]): PlatformBillingS
     seatsBilledAggregateActive += r.quote.seatsBilled
     if (r.quote.plan === "individual") planActiveBillable.individual += 1
     else planActiveBillable.team += 1
-    if (r.quote.billingCadence === "monthly") {
-      cadenceActiveBillable.monthly += 1
-      mrrContributionMonthlyCadenceUsd += r.quote.equivalentMonthlyUsd
-    } else {
-      cadenceActiveBillable.annual += 1
-      mrrContributionAnnualCadenceUsd += r.quote.equivalentMonthlyUsd
-    }
+    cadenceActiveBillable.monthly += 1
+    mrrContributionMonthlyCadenceUsd += r.quote.equivalentMonthlyUsd
   }
 
   return {
@@ -214,7 +206,6 @@ function summarize(rows: PlatformBillingTenantCommercialRow[]): PlatformBillingS
     cadenceActiveBillable,
     seatsBilledAggregateActive,
     mrrContributionMonthlyCadenceUsd: round2(mrrContributionMonthlyCadenceUsd),
-    mrrContributionAnnualCadenceUsd: round2(mrrContributionAnnualCadenceUsd),
   }
 }
 

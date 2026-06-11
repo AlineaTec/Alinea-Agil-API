@@ -112,7 +112,6 @@ export function extractBillingCadenceFromTransactionItems(data: Record<string, u
   const interval = (first as Record<string, unknown>).billing_cycle
   if (!interval || typeof interval !== "object") return null
   const intv = (interval as { interval?: unknown }).interval
-  if (intv === "month") return "monthly"
-  if (intv === "year") return "annual"
+  if (intv === "month" || intv === "year") return "monthly"
   return null
 }

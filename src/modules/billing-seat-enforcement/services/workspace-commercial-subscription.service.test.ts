@@ -17,11 +17,8 @@ const WS = "aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee"
 
 const catalog = createPaddlePriceCatalogForTests({
   individualMonthly: "pri_ind_m",
-  individualAnnual: "pri_ind_a",
   teamBaseMonthly: "pri_team_m",
-  teamBaseAnnual: "pri_team_a",
   additionalSeatMonthly: "pri_add_m",
-  additionalSeatAnnual: "pri_add_a",
 })
 
 function baseSnapshot(over: Partial<WorkspaceBillingSnapshotProps> = {}): WorkspaceBillingSnapshotProps {
@@ -82,14 +79,14 @@ describe("parseCommercialSubscriptionForOrchestration", () => {
     }
   })
 
-  it("Individual annual qty 1", () => {
+  it("Individual monthly qty 1", () => {
     const parsed = parseCommercialSubscriptionForOrchestration(catalog, {
-      items: [{ price_id: "pri_ind_a", quantity: 1 }],
+      items: [{ price_id: "pri_ind_m", quantity: 1 }],
     })
     assert.equal(parsed.ok, true)
     if (parsed.ok) {
       assert.equal(parsed.planKind, "individual")
-      assert.equal(parsed.cadence, "annual")
+      assert.equal(parsed.cadence, "monthly")
     }
   })
 
@@ -104,21 +101,15 @@ describe("parseCommercialSubscriptionForOrchestration", () => {
 describe("WorkspaceCommercialSubscriptionService (orquestación)", () => {
   const envKeys = [
     "PADDLE_PRICE_INDIVIDUAL_MONTHLY",
-    "PADDLE_PRICE_INDIVIDUAL_ANNUAL",
     "PADDLE_PRICE_TEAM_BASE_MONTHLY",
-    "PADDLE_PRICE_TEAM_BASE_ANNUAL",
     "PADDLE_PRICE_ADDITIONAL_SEAT_MONTHLY",
-    "PADDLE_PRICE_ADDITIONAL_SEAT_ANNUAL",
     "PADDLE_API_KEY",
   ] as const
 
   beforeEach(() => {
     process.env.PADDLE_PRICE_INDIVIDUAL_MONTHLY = "pri_ind_m"
-    process.env.PADDLE_PRICE_INDIVIDUAL_ANNUAL = "pri_ind_a"
     process.env.PADDLE_PRICE_TEAM_BASE_MONTHLY = "pri_team_m"
-    process.env.PADDLE_PRICE_TEAM_BASE_ANNUAL = "pri_team_a"
     process.env.PADDLE_PRICE_ADDITIONAL_SEAT_MONTHLY = "pri_add_m"
-    process.env.PADDLE_PRICE_ADDITIONAL_SEAT_ANNUAL = "pri_add_a"
     process.env.PADDLE_API_KEY = "sandbox_test_key"
   })
 

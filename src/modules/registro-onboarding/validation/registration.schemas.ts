@@ -71,7 +71,7 @@ export const setModalityBodySchema = z
       })
     }
     if (
-      (val.planTier === "team" || val.planTier === "pro") &&
+      (val.planTier === "estandar" || val.planTier === "profesional") &&
       val.modality !== undefined &&
       normalizeWorkspaceModality(val.modality) === "individual"
     ) {
@@ -112,6 +112,11 @@ export const commercialQuoteBodySchema = z
   })
 
 export type CommercialQuoteBody = z.infer<typeof commercialQuoteBodySchema>
+
+/** POST /paddle-checkout-lines — misma forma que commercial-quote. */
+export const paddleCheckoutLinesBodySchema = commercialQuoteBodySchema
+
+export type PaddleCheckoutLinesBody = z.infer<typeof paddleCheckoutLinesBodySchema>
 
 /** POST /workspace-code-availability — OP-D1 pre-check. */
 export const workspaceCodeAvailabilityBodySchema = z.object({

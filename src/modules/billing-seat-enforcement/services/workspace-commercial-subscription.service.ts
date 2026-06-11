@@ -56,7 +56,7 @@ function requireCatalog(): PaddlePriceCatalog {
   if (!catalog) {
     throw new WorkspaceCommercialSubscriptionError(
       "commercial_catalog_not_configured",
-      "Faltan variables PADDLE_PRICE_* (las 6 del catálogo comercial).",
+      "Faltan variables PADDLE_PRICE_* (catálogo comercial mensual incompleto).",
       503,
     )
   }
@@ -143,9 +143,6 @@ export function parseCommercialSubscriptionForOrchestration(
   }
 
   const derived = deriveCommercialSeatEntitlementFromPaddleItems(items, catalog)
-  if (derived.issues.some((i) => i === "mixed_billing_interval_monthly_and_annual")) {
-    return { ok: false, reason: "mixed_interval" }
-  }
 
   let cadence: BillingCadence | null = null
   let teamBaseQty = 0

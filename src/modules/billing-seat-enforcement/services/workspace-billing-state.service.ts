@@ -29,7 +29,10 @@ function splitPurchasedForPlan(
   purchased: number,
 ): { includedInPlan: number; additionalPaid: number } {
   if (plan === "individual") {
-    return { includedInPlan: 1, additionalPaid: 0 }
+    return { includedInPlan: purchased, additionalPaid: 0 }
+  }
+  if (purchased <= INCLUDED_BASELINE_TEAM_V1) {
+    return { includedInPlan: purchased, additionalPaid: 0 }
   }
   return {
     includedInPlan: INCLUDED_BASELINE_TEAM_V1,

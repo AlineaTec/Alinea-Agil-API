@@ -21,10 +21,8 @@ function planLabel(planKind: string): string {
   return planKind
 }
 
-function cadenceLabel(c: string | null): string {
-  if (c === "monthly") return "Mensual"
-  if (c === "annual") return "Anual"
-  return c ?? "—"
+function cadenceLabel(_c: string | null): string {
+  return "Mensual"
 }
 
 export async function renderPaymentReceiptPdf(props: WorkspacePaymentReceiptProps): Promise<Buffer> {

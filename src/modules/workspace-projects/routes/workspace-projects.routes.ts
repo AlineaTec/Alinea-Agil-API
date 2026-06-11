@@ -11,6 +11,7 @@ import {
   ProjectDraftNotFoundError,
 } from "../domain/project-draft.errors.js"
 import { assertCanAccessProjectDraftWizardPreliminary } from "../policies/project-draft-authorization.policy.js"
+import { WorkspaceActiveProjectLimitError } from "../../commercial-pricing/workspace-plan-limits.policy.js"
 import type { ProjectDraftService } from "../services/project-draft.service.js"
 import {
   createProjectDraftBodySchema,
@@ -49,6 +50,16 @@ function respondDraftError(err: unknown, res: Response, next: NextFunction): voi
   }
   if (err instanceof ProjectDraftNotFoundError) {
     res.status(404).json({ error: err.code, message: err.message })
+    return
+  }
+  if (err instanceof WorkspaceActiveProjectLimitError) {
+    res.status(403).json({
+      error: err.code,
+      message: err.message,
+      planTier: err.planTier,
+      maxActiveProjects: err.maxActiveProjects,
+      currentActiveProjects: err.currentActiveProjects,
+    })
     return
   }
   if (err instanceof Error && err.message === "workspace_users_actor_missing") {

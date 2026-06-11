@@ -9,11 +9,8 @@ import { createPaddlePriceCatalogForTests } from "./paddle-price-catalog.js"
 
 const CAT = createPaddlePriceCatalogForTests({
   individualMonthly: "pri_ind_m",
-  individualAnnual: "pri_ind_y",
   teamBaseMonthly: "pri_tb_m",
-  teamBaseAnnual: "pri_tb_y",
   additionalSeatMonthly: "pri_ad_m",
-  additionalSeatAnnual: "pri_ad_y",
 })
 
 test("additionalSeatQty = max(0, desired - 3)", () => {
@@ -62,5 +59,39 @@ test("checkout Individual un solo item", () => {
   assert.equal(r.ok, true)
   if (r.ok) {
     assert.deepEqual(r.lines, [{ priceId: "pri_ind_m", quantity: 1 }])
+  }
+})
+
+const TIER_CAT = createPaddlePriceCatalogForTests({
+  tierPerSeatModel: true,
+  estandarLicenseMonthly: "pri_est_m",
+  profesionalLicenseMonthly: "pri_pro_m",
+})
+
+test("checkout Estándar: una línea por licencia", () => {
+  const r = buildPaddleSubscriptionCheckoutLines({
+    plan: "team",
+    billingCadence: "monthly",
+    teamSeatsRequested: 4,
+    planTier: "estandar",
+    catalog: TIER_CAT,
+  })
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    assert.deepEqual(r.lines, [{ priceId: "pri_est_m", quantity: 4 }])
+  }
+})
+
+test("checkout Profesional: una línea por licencia", () => {
+  const r = buildPaddleSubscriptionCheckoutLines({
+    plan: "team",
+    billingCadence: "monthly",
+    teamSeatsRequested: 2,
+    planTier: "profesional",
+    catalog: TIER_CAT,
+  })
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    assert.deepEqual(r.lines, [{ priceId: "pri_pro_m", quantity: 2 }])
   }
 })

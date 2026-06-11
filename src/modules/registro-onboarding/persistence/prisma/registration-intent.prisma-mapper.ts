@@ -1,4 +1,5 @@
 import type { IdentityRegistrationIntent as IdentityRegistrationIntentRow } from "@prisma/client"
+import { normalizeStoredBillingCadence } from "../../../commercial-pricing/billing-cadence.js"
 import type { IdentityRegistrationIntent } from "../../domain/registration-intent.entity.js"
 import type { IdentityRegistrationIntentPersisted } from "../mappers/registration-intent.mapper.js"
 import { toIdentityRegistrationIntent } from "../mappers/registration-intent.mapper.js"
@@ -16,7 +17,7 @@ export function identityRegistrationIntentRowToPersisted(
     accountFullName: row.account_full_name ?? undefined,
     passwordHash: row.password_hash ?? undefined,
     planSku: row.plan_sku ?? undefined,
-    billingCadence: row.billing_cadence ?? undefined,
+    billingCadence: normalizeStoredBillingCadence(row.billing_cadence ?? undefined),
     teamSeatsPurchased: row.team_seats_purchased ?? undefined,
     paymentProviderRef: row.payment_provider_ref ?? undefined,
     provisionedUserPublicId: row.provisioned_user_public_id ?? undefined,

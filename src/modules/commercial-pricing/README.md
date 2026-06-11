@@ -1,8 +1,16 @@
 # Commercial pricing (API)
 
-Fuente de verdad para precios en **USD** alineados a `contracts-docs` **billing-seat-enforcement** (catálogo Team base + Additional Seat, descuento anual 10%).
+Fuente de verdad para precios en **USD**, alineada al catálogo Web/Landing (`alinea-plan-catalog.ts`).
 
-## Modelo v1
+## Modelo vigente (tiers)
+
+| Tier | Precio/licencia/mes | Mín. licencias | Usuarios | Proyectos activos |
+|------|---------------------|----------------|----------|-------------------|
+| **Gratis** | $0 | — | 5 | 5 |
+| **Equipo** | $6 | 1 | según licencias | ilimitados |
+| **Pro** | $12 | 1 | según licencias | ilimitados |
+
+## Modelo Paddle legado (suscripciones históricas)
 
 | Concepto | Lista mensual (USD) |
 |----------|---------------------|
@@ -10,35 +18,32 @@ Fuente de verdad para precios en **USD** alineados a `contracts-docs` **billing-
 | **Team base** | 45 (incluye 3 usuarios) |
 | **Seat adicional** | 15 por usuario por encima de 3 |
 
-**Anual:** descuento **10%** sobre el subtotal del periodo (= 12× la lista mensual del SKUs efectivos). Parametrizable con `COMMERCIAL_ANNUAL_DISCOUNT_RATE` hasta `ANNUAL_DISCOUNT_RATE_CAP` (0.2).
+Toda facturación nueva es **mensual** (sin opción anual).
 
 ## Paddle — variables de entorno (price ids)
 
-Obligatorias las **6** para que webhooks/reconciliación usen semántica estricta (`deriveCommercialSeatEntitlementFromPaddleItems`). Si falta alguna, el API entra en **modo legacy** (suma de `quantity` en ítems, sin interpretar roles).
+**Modelo tier (recomendado):** las **2** variables `PADDLE_PRICE_*_LICENSE_MONTHLY` → checkout y webhooks con `qty = licencias`.
+
+| Variable | Rol |
+|----------|-----|
+| `PADDLE_PRICE_TEAM_LICENSE_MONTHLY` | Equipo $6/licencia mensual |
+| `PADDLE_PRICE_PRO_LICENSE_MONTHLY` | Pro $12/licencia mensual |
+
+**Modelo legado:** las **3** variables mensuales base+addon (mín. 3 asientos). Si falta el catálogo tier y alguna legado, el API usa suma legacy de `quantity`.
 
 | Variable | Rol |
 |----------|-----|
 | `PADDLE_PRICE_INDIVIDUAL_MONTHLY` | Individual mensual |
-| `PADDLE_PRICE_INDIVIDUAL_ANNUAL` | Individual anual |
-| `PADDLE_PRICE_TEAM_BASE_MONTHLY` | Team Base mensual |
-| `PADDLE_PRICE_TEAM_BASE_ANNUAL` | Team Base anual |
-| `PADDLE_PRICE_ADDITIONAL_SEAT_MONTHLY` | Additional Seat mensual |
-| `PADDLE_PRICE_ADDITIONAL_SEAT_ANNUAL` | Additional Seat anual |
-
-## Variables de entorno (descuento)
-
-| Variable | Descripción |
-|----------|-------------|
-| `COMMERCIAL_ANNUAL_DISCOUNT_RATE` | Opcional. Decimal `0`–`0.2`. Si se omite, se usa **10%** (`ANNUAL_DISCOUNT_RATE_DEFAULT`). |
+| `PADDLE_PRICE_TEAM_BASE_MONTHLY` | Team base mensual |
+| `PADDLE_PRICE_ADDITIONAL_SEAT_MONTHLY` | Seat adicional mensual |
 
 ## Uso en código
 
 - `computeCommercialQuote()` — cotización (base + addon en Team).
-- `buildPaddleSubscriptionCheckoutLines()` — líneas conceptuales para checkout (mismo intervalo en todos los ítems).
+- `buildPaddleSubscriptionCheckoutLines()` — líneas conceptuales para checkout mensual.
 - `deriveCommercialSeatEntitlementFromPaddleItems()` — Paddle items → `entitledSeats` (usado por billing-seat-enforcement).
 - `computeManagedWorkspaceCommercial()` — mismo modelo para admin / reportes.
 - `seatsForNewWorkspaceFromIntent()` — asientos iniciales al provisionar.
-- `getAnnualDiscountRate()` — tasa efectiva del descuento anual.
 
 ## Frontend (`/web`)
 

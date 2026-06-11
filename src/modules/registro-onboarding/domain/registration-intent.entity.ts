@@ -27,7 +27,7 @@ export interface IdentityRegistrationIntent {
   /** SKU / plan cuando exista catálogo (Fase C). */
   planSku?: string
   /** Mensual o anual; default mensual si no se envía (legado). */
-  billingCadence?: "monthly" | "annual"
+  billingCadence?: "monthly"
   /** Asientos contratados en Team (≥3 facturados); Individual ignora. */
   teamSeatsPurchased?: number
   /** Referencias de pago cuando exista integración (Fase F). */

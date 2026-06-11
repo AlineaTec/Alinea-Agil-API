@@ -19,10 +19,7 @@ function rowFromWorkspace(row: {
     code: row.slug,
     displayName: row.display_name,
     modality,
-    billingCadence:
-      row.billing_cadence === "monthly" || row.billing_cadence === "annual"
-        ? row.billing_cadence
-        : undefined,
+    billingCadence: row.billing_cadence === "monthly" ? "monthly" : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

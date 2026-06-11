@@ -8,16 +8,19 @@ export type PaddlePriceRole =
   | { productRole: "individual"; interval: BillingCadence }
   | { productRole: "team_base"; interval: BillingCadence }
   | { productRole: "additional_seat"; interval: BillingCadence }
+  | { productRole: "estandar_license"; interval: BillingCadence }
+  | { productRole: "profesional_license"; interval: BillingCadence }
 
 export type PaddlePriceCatalog = {
   /** price_id → semántica */
   byPriceId: ReadonlyMap<string, PaddlePriceRole>
   individualMonthly: string
-  individualAnnual: string
   teamBaseMonthly: string
-  teamBaseAnnual: string
   additionalSeatMonthly: string
-  additionalSeatAnnual: string
+  estandarLicenseMonthly: string
+  profesionalLicenseMonthly: string
+  /** Catálogo con precios por licencia Estándar/Profesional (sin base 3 + addon). */
+  tierPerSeatModel: boolean
 }
 
 export type PaddleCommercialSeatDerivation = {
@@ -38,42 +41,51 @@ function entry(map: Map<string, PaddlePriceRole>, priceId: string, role: PaddleP
 }
 
 /**
- * Carga el catálogo si están las **6** variables; si falta alguna devuelve `null` (modo legacy).
+ * Carga el catálogo si están las variables mensuales requeridas; si falta alguna devuelve `null` (modo legacy).
  */
-export function loadPaddlePriceCatalogFromEnv(): PaddlePriceCatalog | null {
-  const individualMonthly = process.env.PADDLE_PRICE_INDIVIDUAL_MONTHLY?.trim() ?? ""
-  const individualAnnual = process.env.PADDLE_PRICE_INDIVIDUAL_ANNUAL?.trim() ?? ""
-  const teamBaseMonthly = process.env.PADDLE_PRICE_TEAM_BASE_MONTHLY?.trim() ?? ""
-  const teamBaseAnnual = process.env.PADDLE_PRICE_TEAM_BASE_ANNUAL?.trim() ?? ""
-  const additionalSeatMonthly = process.env.PADDLE_PRICE_ADDITIONAL_SEAT_MONTHLY?.trim() ?? ""
-  const additionalSeatAnnual = process.env.PADDLE_PRICE_ADDITIONAL_SEAT_ANNUAL?.trim() ?? ""
+function readPaddlePriceEnv(primary: string, legacy?: string): string {
+  const v = process.env[primary]?.trim() ?? ""
+  if (v) return v
+  if (legacy) return process.env[legacy]?.trim() ?? ""
+  return ""
+}
 
-  const all = [
-    individualMonthly,
-    individualAnnual,
-    teamBaseMonthly,
-    teamBaseAnnual,
-    additionalSeatMonthly,
-    additionalSeatAnnual,
-  ]
-  if (all.some((s) => !s)) return null
+export function loadPaddlePriceCatalogFromEnv(): PaddlePriceCatalog | null {
+  const estandarLicenseMonthly = readPaddlePriceEnv(
+    "PADDLE_PRICE_ESTANDAR_LICENSE_MONTHLY",
+    "PADDLE_PRICE_TEAM_LICENSE_MONTHLY",
+  )
+  const profesionalLicenseMonthly = readPaddlePriceEnv(
+    "PADDLE_PRICE_PROFESIONAL_LICENSE_MONTHLY",
+    "PADDLE_PRICE_PRO_LICENSE_MONTHLY",
+  )
+  const tierPerSeatModel = Boolean(estandarLicenseMonthly && profesionalLicenseMonthly)
+
+  const individualMonthly = process.env.PADDLE_PRICE_INDIVIDUAL_MONTHLY?.trim() ?? ""
+  const teamBaseMonthly = process.env.PADDLE_PRICE_TEAM_BASE_MONTHLY?.trim() ?? ""
+  const additionalSeatMonthly = process.env.PADDLE_PRICE_ADDITIONAL_SEAT_MONTHLY?.trim() ?? ""
+
+  const legacyAll = [individualMonthly, teamBaseMonthly, additionalSeatMonthly]
+  if (!tierPerSeatModel && legacyAll.some((s) => !s)) return null
 
   const byPriceId = new Map<string, PaddlePriceRole>()
-  entry(byPriceId, individualMonthly, { productRole: "individual", interval: "monthly" })
-  entry(byPriceId, individualAnnual, { productRole: "individual", interval: "annual" })
-  entry(byPriceId, teamBaseMonthly, { productRole: "team_base", interval: "monthly" })
-  entry(byPriceId, teamBaseAnnual, { productRole: "team_base", interval: "annual" })
-  entry(byPriceId, additionalSeatMonthly, { productRole: "additional_seat", interval: "monthly" })
-  entry(byPriceId, additionalSeatAnnual, { productRole: "additional_seat", interval: "annual" })
+  if (!tierPerSeatModel) {
+    entry(byPriceId, individualMonthly, { productRole: "individual", interval: "monthly" })
+    entry(byPriceId, teamBaseMonthly, { productRole: "team_base", interval: "monthly" })
+    entry(byPriceId, additionalSeatMonthly, { productRole: "additional_seat", interval: "monthly" })
+  } else {
+    entry(byPriceId, estandarLicenseMonthly, { productRole: "estandar_license", interval: "monthly" })
+    entry(byPriceId, profesionalLicenseMonthly, { productRole: "profesional_license", interval: "monthly" })
+  }
 
   return {
     byPriceId,
     individualMonthly,
-    individualAnnual,
     teamBaseMonthly,
-    teamBaseAnnual,
     additionalSeatMonthly,
-    additionalSeatAnnual,
+    estandarLicenseMonthly,
+    profesionalLicenseMonthly,
+    tierPerSeatModel,
   }
 }
 
@@ -87,28 +99,45 @@ export function resolvePriceRoleInCatalog(
 
 /** Útil en tests — mismas reglas que env, sin leer proceso */
 export function createPaddlePriceCatalogForTests(ids: {
-  individualMonthly: string
-  individualAnnual: string
-  teamBaseMonthly: string
-  teamBaseAnnual: string
-  additionalSeatMonthly: string
-  additionalSeatAnnual: string
+  individualMonthly?: string
+  teamBaseMonthly?: string
+  additionalSeatMonthly?: string
+  estandarLicenseMonthly?: string
+  profesionalLicenseMonthly?: string
+  tierPerSeatModel?: boolean
 }): PaddlePriceCatalog {
+  const tierPerSeatModel = ids.tierPerSeatModel ?? false
   const byPriceId = new Map<string, PaddlePriceRole>()
-  entry(byPriceId, ids.individualMonthly, { productRole: "individual", interval: "monthly" })
-  entry(byPriceId, ids.individualAnnual, { productRole: "individual", interval: "annual" })
-  entry(byPriceId, ids.teamBaseMonthly, { productRole: "team_base", interval: "monthly" })
-  entry(byPriceId, ids.teamBaseAnnual, { productRole: "team_base", interval: "annual" })
-  entry(byPriceId, ids.additionalSeatMonthly, { productRole: "additional_seat", interval: "monthly" })
-  entry(byPriceId, ids.additionalSeatAnnual, { productRole: "additional_seat", interval: "annual" })
+  if (tierPerSeatModel) {
+    const estandarLicenseMonthly = ids.estandarLicenseMonthly ?? "pri_tl_m"
+    const profesionalLicenseMonthly = ids.profesionalLicenseMonthly ?? "pri_pl_m"
+    entry(byPriceId, estandarLicenseMonthly, { productRole: "estandar_license", interval: "monthly" })
+    entry(byPriceId, profesionalLicenseMonthly, { productRole: "profesional_license", interval: "monthly" })
+    return {
+      byPriceId,
+      individualMonthly: "",
+      teamBaseMonthly: "",
+      additionalSeatMonthly: "",
+      estandarLicenseMonthly,
+      profesionalLicenseMonthly,
+      tierPerSeatModel: true,
+    }
+  }
+
+  const individualMonthly = ids.individualMonthly ?? "pri_ind_m"
+  const teamBaseMonthly = ids.teamBaseMonthly ?? "pri_tb_m"
+  const additionalSeatMonthly = ids.additionalSeatMonthly ?? "pri_ad_m"
+  entry(byPriceId, individualMonthly, { productRole: "individual", interval: "monthly" })
+  entry(byPriceId, teamBaseMonthly, { productRole: "team_base", interval: "monthly" })
+  entry(byPriceId, additionalSeatMonthly, { productRole: "additional_seat", interval: "monthly" })
   return {
     byPriceId,
-    individualMonthly: ids.individualMonthly,
-    individualAnnual: ids.individualAnnual,
-    teamBaseMonthly: ids.teamBaseMonthly,
-    teamBaseAnnual: ids.teamBaseAnnual,
-    additionalSeatMonthly: ids.additionalSeatMonthly,
-    additionalSeatAnnual: ids.additionalSeatAnnual,
+    individualMonthly,
+    teamBaseMonthly,
+    additionalSeatMonthly,
+    estandarLicenseMonthly: "",
+    profesionalLicenseMonthly: "",
+    tierPerSeatModel: false,
   }
 }
 
@@ -223,20 +252,49 @@ export function deriveCommercialSeatEntitlementFromPaddleItems(
   }
 
   const intervals = [...new Set(classified.map((c) => c.role.interval))]
-  if (intervals.length > 1) {
-    return {
-      entitledSeats: null,
-      planKind: null,
-      billingIntervals: intervals,
-      teamBaseQuantityObserved: null,
-      issues: ["mixed_billing_interval_monthly_and_annual"],
-      usedLegacyQuantitySum: false,
-    }
-  }
 
   const hasInd = classified.some((c) => c.role.productRole === "individual")
   const hasBase = classified.some((c) => c.role.productRole === "team_base")
   const hasAddon = classified.some((c) => c.role.productRole === "additional_seat")
+  const hasEstandarLicense = classified.some((c) => c.role.productRole === "estandar_license")
+  const hasProfesionalLicense = classified.some((c) => c.role.productRole === "profesional_license")
+
+  if (hasEstandarLicense || hasProfesionalLicense) {
+    if (hasInd || hasBase || hasAddon || (hasEstandarLicense && hasProfesionalLicense)) {
+      return {
+        entitledSeats: null,
+        planKind: null,
+        billingIntervals: intervals,
+        teamBaseQuantityObserved: null,
+        issues: ["conflicting_tier_license_lines"],
+        usedLegacyQuantitySum: false,
+      }
+    }
+    const role = hasEstandarLicense ? "estandar_license" : "profesional_license"
+    const rows = classified.filter((c) => c.role.productRole === role)
+    if (rows.length !== 1) {
+      return {
+        entitledSeats: null,
+        planKind: "team",
+        billingIntervals: intervals,
+        teamBaseQuantityObserved: null,
+        issues: ["tier_license_multiple_lines"],
+        usedLegacyQuantitySum: false,
+      }
+    }
+    const qty = rows[0]!.qty
+    if (qty < 1) {
+      issues.push("tier_license_quantity_below_one")
+    }
+    return {
+      entitledSeats: qty,
+      planKind: "team",
+      billingIntervals: intervals,
+      teamBaseQuantityObserved: null,
+      issues,
+      usedLegacyQuantitySum: false,
+    }
+  }
 
   if (hasInd && (hasBase || hasAddon)) {
     return {

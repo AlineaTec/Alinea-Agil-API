@@ -8,11 +8,8 @@ import {
 
 const CAT = createPaddlePriceCatalogForTests({
   individualMonthly: "pri_ind_m",
-  individualAnnual: "pri_ind_y",
   teamBaseMonthly: "pri_tb_m",
-  teamBaseAnnual: "pri_tb_y",
   additionalSeatMonthly: "pri_ad_m",
-  additionalSeatAnnual: "pri_ad_y",
 })
 
 test("Individual monthly mapea a 1 asiento", () => {
@@ -57,16 +54,13 @@ test("Team base qty 2 no aumenta entitlement más allá de 3 + addon", () => {
   assert.ok(d.issues.includes("team_base_quantity_not_one"))
 })
 
-test("No mezclar monthly y annual", () => {
+test("price_id desconocido rechaza derivación", () => {
   const d = deriveCommercialSeatEntitlementFromPaddleItems(
-    [
-      { price_id: "pri_tb_m", quantity: 1 },
-      { price_id: "pri_ad_y", quantity: 1 },
-    ],
+    [{ price_id: "pri_unknown", quantity: 1 }],
     CAT,
   )
   assert.equal(d.entitledSeats, null)
-  assert.ok(d.issues.includes("mixed_billing_interval_monthly_and_annual"))
+  assert.ok(d.issues.some((i) => i.startsWith("unknown_price_id:")))
 })
 
 test("Individual no admite addon en v1 — conflicto con Additional Seat", () => {
@@ -86,4 +80,17 @@ test("Legacy sin catálogo: suma quantities", () => {
   const d = deriveCommercialSeatEntitlementFromPaddleItems([{ quantity: 7 }], null)
   assert.equal(d.entitledSeats, 7)
   assert.equal(d.usedLegacyQuantitySum, true)
+})
+
+test("Tier Estándar: qty = licencias contratadas", () => {
+  const tierCat = createPaddlePriceCatalogForTests({
+    tierPerSeatModel: true,
+    estandarLicenseMonthly: "pri_tl_m",
+  })
+  const d = deriveCommercialSeatEntitlementFromPaddleItems(
+    [{ price_id: "pri_tl_m", quantity: 2 }],
+    tierCat,
+  )
+  assert.equal(d.entitledSeats, 2)
+  assert.equal(d.planKind, "team")
 })

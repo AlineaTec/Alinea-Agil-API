@@ -5,7 +5,7 @@ export type WorkspaceState = {
   slug: string
   displayName: string
   modality: WorkspaceModality | "empresa"
-  billingCadence?: "monthly" | "annual"
+  billingCadence?: "monthly"
   sourceRegistrationIntentPublicId: string
   createdAt: Date
   updatedAt: Date
@@ -16,7 +16,7 @@ export type CreateWorkspaceInput = {
   slug: string
   displayName: string
   modality: WorkspaceModality | "empresa"
-  billingCadence?: "monthly" | "annual"
+  billingCadence?: "monthly"
   sourceRegistrationIntentPublicId: string
 }
 

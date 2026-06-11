@@ -19,7 +19,7 @@ export type SetModalityResponse =
       intentPublicId: string
       intentStatus: "MODALITY_SELECTED"
       modality: WorkspaceModality
-      billingCadence: "monthly" | "annual"
+      billingCadence: "monthly"
       planTier?: CommercialPlanTier
       teamSeatsPurchased?: number
       /** Cotización alineada a `commercial-pricing` (fuente de verdad). */

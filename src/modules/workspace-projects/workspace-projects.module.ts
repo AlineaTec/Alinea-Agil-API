@@ -1,6 +1,8 @@
 import type { Express, RequestHandler } from "express"
+import type { PrismaClient } from "@prisma/client"
 import type { AuthBearerService } from "../login-session/services/auth-bearer.service.js"
 import type { KanbanFlowService } from "../project-kanban-core/services/kanban-flow.service.js"
+import { WorkspacePlanContextService } from "../commercial-pricing/workspace-plan-context.service.js"
 import type { ProjectRuntimeService } from "../workspace-project-runtime/services/project-runtime.service.js"
 import type { WorkspaceUserService } from "../workspace-users/services/workspace-user.service.js"
 import { createProjectsRepositories } from "../../infrastructure/persistence/projects-repositories.factory.js"
@@ -12,9 +14,11 @@ export function createProjectDraftService(
   projectRuntimeService: ProjectRuntimeService,
   kanbanFlowService: KanbanFlowService,
   draftRepository?: ProjectDraftRepository,
+  prisma?: PrismaClient,
 ): ProjectDraftService {
   const draft = draftRepository ?? createProjectsRepositories().draft
-  return new ProjectDraftService(draft, projectRuntimeService, kanbanFlowService)
+  const workspacePlanContext = prisma ? new WorkspacePlanContextService(prisma) : null
+  return new ProjectDraftService(draft, projectRuntimeService, kanbanFlowService, workspacePlanContext)
 }
 
 export { ProjectDraftService } from "./services/project-draft.service.js"

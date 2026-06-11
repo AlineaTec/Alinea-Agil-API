@@ -6,6 +6,7 @@ import {
   mountLoginSessionModule,
 } from "./modules/login-session/login-session.module.js"
 import { createRuntimePersistence } from "./composition/runtime-persistence.js"
+import { getPrismaClient } from "./infrastructure/postgres/prisma-client.js"
 import { mountRegistroOnboardingModule } from "./modules/registro-onboarding/registration.module.js"
 import {
   createWorkspaceLicenseService,
@@ -570,6 +571,7 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
     projectRuntimeService,
     kanbanFlowService,
     runtimePersistence.projects.draft,
+    getPrismaClient(),
   )
   const workspaceSettingsService = createWorkspaceSettingsService(
     runtimePersistence.workspace.settings,

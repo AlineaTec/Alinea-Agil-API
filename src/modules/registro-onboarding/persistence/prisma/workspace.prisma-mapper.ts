@@ -1,4 +1,5 @@
 import type { Workspace } from "@prisma/client"
+import { normalizeStoredBillingCadence } from "../../../commercial-pricing/billing-cadence.js"
 import { normalizeWorkspaceModality } from "../../domain/workspace-modality.js"
 import type { CreateWorkspaceInput, WorkspaceState } from "../workspace.repository.js"
 
@@ -8,7 +9,7 @@ export function workspaceFromPrisma(row: Workspace): WorkspaceState {
     slug: row.slug,
     displayName: row.display_name,
     modality: normalizeWorkspaceModality(row.modality) ?? "individual",
-    billingCadence: row.billing_cadence ?? undefined,
+    billingCadence: normalizeStoredBillingCadence(row.billing_cadence ?? undefined),
     sourceRegistrationIntentPublicId: row.source_registration_intent_public_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

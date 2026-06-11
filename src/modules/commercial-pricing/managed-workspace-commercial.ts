@@ -1,9 +1,11 @@
 import type { BillingCadence, CommercialPlanKind } from "./commercial-pricing.constants.js"
+import { resolveActiveBillingCadence, type StoredBillingCadence } from "./billing-cadence.js"
+import type { CommercialPlanTier } from "./commercial-pricing.constants.js"
 import {
   ADDITIONAL_SEAT_MONTHLY_USD,
   INDIVIDUAL_MONTHLY_USD,
   TEAM_BASE_MONTHLY_USD,
-  TEAM_MIN_SEATS,
+  LEGACY_TEAM_MIN_SEATS,
 } from "./commercial-pricing.constants.js"
 import { type CommercialQuote, computeCommercialQuote } from "./compute-commercial-quote.js"
 
@@ -28,17 +30,19 @@ export type ManagedWorkspaceCommercialIncomplete = {
 
 export function computeManagedWorkspaceCommercial(input: {
   plan: CommercialPlanKind
-  billingCadence?: BillingCadence
+  billingCadence?: StoredBillingCadence
   license: { seatsPurchased: number } | null
+  planTier?: CommercialPlanTier
 }): ManagedWorkspaceCommercialOk | ManagedWorkspaceCommercialIncomplete {
   if (input.license === null) {
     return { ok: false, reason: "missing_license" }
   }
-  const billingCadenceUsed = input.billingCadence ?? "monthly"
+  const billingCadenceUsed = resolveActiveBillingCadence(input.billingCadence)
   const quote = computeCommercialQuote({
     plan: input.plan,
     billingCadence: billingCadenceUsed,
     teamSeatsRequested: input.plan === "team" ? input.license.seatsPurchased : undefined,
+    planTier: input.planTier,
   })
   const seatsContracted = input.plan === "team" ? input.license.seatsPurchased : 1
   return {
@@ -60,6 +64,9 @@ export function describeManagedWorkspaceCommercialEs(
     return `${cadence} · Individual · lista USD ${INDIVIDUAL_MONTHLY_USD}/mes · ${q.seatsBilled} asiento facturable · total periodo USD ${q.totalDueUsd.toFixed(2)} · equivalente mensual USD ${q.equivalentMonthlyUsd.toFixed(2)}`
   }
   const seatsEff = q.seatsBilled
-  const minNote = line.seatsContracted < TEAM_MIN_SEATS ? ` (mín. facturación ${TEAM_MIN_SEATS})` : ""
+  const minNote =
+    line.seatsContracted < LEGACY_TEAM_MIN_SEATS
+      ? ` (mín. facturación legado ${LEGACY_TEAM_MIN_SEATS})`
+      : ""
   return `${cadence} · Team · ${seatsEff} asientos · base USD ${TEAM_BASE_MONTHLY_USD}/mes + addon USD ${ADDITIONAL_SEAT_MONTHLY_USD}/mes${minNote} · total mes USD ${q.totalDueUsd.toFixed(2)} · equiv. mensual USD ${q.equivalentMonthlyUsd.toFixed(2)}`
 }
