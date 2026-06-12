@@ -18,6 +18,7 @@ import {
   parseSprintBoardMove,
   sumCompletedStoryPoints,
   sumRemainingStoryPoints,
+  sumStoryPointsByColumn,
   type SimItem,
   utcYmd,
 } from "./burndown-replay.js"
@@ -81,10 +82,18 @@ function scopePointsAt(
   return s
 }
 
+export type SprintBurndownCumulativeFlowPoint = {
+  toDoPoints: number
+  inProgressPoints: number
+  inReviewPoints: number
+  donePoints: number
+}
+
 export type SprintBurndownDayPoint = {
   date: string
   remainingPoints: number
   idealRemainingPoints: number
+  cumulativeFlow: SprintBurndownCumulativeFlowPoint
   scopeChangedThisDay?: boolean
   scopeChangeNote?: string | null
 }
@@ -253,6 +262,7 @@ export class ScrumBurndownVelocityService {
         dataQualityWarnings.push("unestimated_items_in_sprint: remaining excludes items without story points (per product v1).")
       }
       const sc = scopePointsAt(st, itemIds)
+      const flow = sumStoryPointsByColumn(st, itemIds)
       const changed = prevSc !== null && sc !== prevSc
       if (changed) scopeChangeDetected = true
       prevSc = sc
@@ -265,6 +275,12 @@ export class ScrumBurndownVelocityService {
         idealRemainingPoints: options.includeIdealLine
           ? Math.round(ideal * 1e6) / 1e6
           : 0,
+        cumulativeFlow: {
+          toDoPoints: Math.round(flow.toDoPoints * 1e6) / 1e6,
+          inProgressPoints: Math.round(flow.inProgressPoints * 1e6) / 1e6,
+          inReviewPoints: Math.round(flow.inReviewPoints * 1e6) / 1e6,
+          donePoints: Math.round(flow.donePoints * 1e6) / 1e6,
+        },
         scopeChangedThisDay: changed,
         scopeChangeNote: changed
           ? "Scope (committed story points) changed vs previous day."
@@ -327,6 +343,12 @@ export class ScrumBurndownVelocityService {
       sprint.sprintPublicId,
     )
     let remaining = 0
+    const flow: SprintBurndownCumulativeFlowPoint = {
+      toDoPoints: 0,
+      inProgressPoints: 0,
+      inReviewPoints: 0,
+      donePoints: 0,
+    }
     for (const m of memberships) {
       const it = await this.backlogRepo.findByProjectAndItemId(
         workspacePublicId,
@@ -335,9 +357,28 @@ export class ScrumBurndownVelocityService {
       )
       if (!it) continue
       if (it.storyPoints === null) continue
+      const sp = it.storyPoints
       const col: SprintBoardColumn = m.boardColumn ?? "to_do"
       if (col !== "done") {
-        remaining += it.storyPoints
+        remaining += sp
+      }
+      switch (col) {
+        case "to_do":
+          flow.toDoPoints += sp
+          break
+        case "in_progress":
+          flow.inProgressPoints += sp
+          break
+        case "in_review":
+          flow.inReviewPoints += sp
+          break
+        case "done":
+          flow.donePoints += sp
+          break
+        default: {
+          const _x: never = col
+          void _x
+        }
       }
     }
     const last = fixedDays[fixedDays.length - 1]!
@@ -347,6 +388,12 @@ export class ScrumBurndownVelocityService {
       )
     }
     last.remainingPoints = Math.round(remaining * 1e6) / 1e6
+    last.cumulativeFlow = {
+      toDoPoints: Math.round(flow.toDoPoints * 1e6) / 1e6,
+      inProgressPoints: Math.round(flow.inProgressPoints * 1e6) / 1e6,
+      inReviewPoints: Math.round(flow.inReviewPoints * 1e6) / 1e6,
+      donePoints: Math.round(flow.donePoints * 1e6) / 1e6,
+    }
   }
 
   private async buildBurndownSimulationInput(

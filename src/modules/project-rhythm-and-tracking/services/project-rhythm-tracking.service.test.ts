@@ -72,7 +72,19 @@ function burndownOk(): SprintBurndownResponse {
     initialCommittedPoints: 20,
     completedPointsAsOfLastDay: 4,
     scopeChangeDetected: false,
-    days: [{ date: "2026-01-01", remainingPoints: 16, idealRemainingPoints: 15 }],
+    days: [
+      {
+        date: "2026-01-01",
+        remainingPoints: 16,
+        idealRemainingPoints: 15,
+        cumulativeFlow: {
+          toDoPoints: 10,
+          inProgressPoints: 4,
+          inReviewPoints: 2,
+          donePoints: 4,
+        },
+      },
+    ],
     hasSufficientData: true,
     dataQualityWarnings: [],
     calculationNotes: [],

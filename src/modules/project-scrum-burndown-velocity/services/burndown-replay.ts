@@ -108,3 +108,45 @@ export function sumCompletedStoryPoints(
   }
   return { completed, hasUnestimatedInScope }
 }
+
+export type SprintBoardColumnPointSums = {
+  toDoPoints: number
+  inProgressPoints: number
+  inReviewPoints: number
+  donePoints: number
+}
+
+export function sumStoryPointsByColumn(
+  byId: ReadonlyMap<string, SimItem>,
+  itemIds: readonly string[],
+): SprintBoardColumnPointSums {
+  const out: SprintBoardColumnPointSums = {
+    toDoPoints: 0,
+    inProgressPoints: 0,
+    inReviewPoints: 0,
+    donePoints: 0,
+  }
+  for (const id of itemIds) {
+    const s = byId.get(id)
+    if (!s || s.storyPoints === null) continue
+    switch (s.boardColumn) {
+      case "to_do":
+        out.toDoPoints += s.storyPoints
+        break
+      case "in_progress":
+        out.inProgressPoints += s.storyPoints
+        break
+      case "in_review":
+        out.inReviewPoints += s.storyPoints
+        break
+      case "done":
+        out.donePoints += s.storyPoints
+        break
+      default: {
+        const _x: never = s.boardColumn
+        void _x
+      }
+    }
+  }
+  return out
+}
