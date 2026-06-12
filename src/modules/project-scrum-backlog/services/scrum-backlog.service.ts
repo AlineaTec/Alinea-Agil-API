@@ -23,7 +23,10 @@ import type { ScrumBacklogRepository } from "../persistence/scrum-backlog.reposi
 import type { ScrumSprintPlanningRepository } from "../../project-scrum-sprint-planning/persistence/scrum-sprint-planning.repository.js"
 import type { WorkspaceAuditLogRepository } from "../../workspace-audit-log/persistence/workspace-audit-log.repository.js"
 import type { WorkItemAssignmentListFilter } from "../../work-item-assignment/utils/work-item-assignment-list-filter.util.js"
-import { applyWorkItemAssignmentListFilter } from "../../work-item-assignment/utils/work-item-assignment-list-filter.util.js"
+import {
+  applyWorkItemAssignmentListFilter,
+  buildWorkItemAssignmentListWhere,
+} from "../../work-item-assignment/utils/work-item-assignment-list-filter.util.js"
 import type { WorkReadyDoneControlsService } from "../../work-ready-done-controls/services/work-ready-done-controls.service.js"
 import type { ProjectRuntimeService } from "../../workspace-project-runtime/services/project-runtime.service.js"
 import type { WorkspaceMemberState } from "../../workspace-users/domain/workspace-member.js"
@@ -91,6 +94,43 @@ export class ScrumBacklogService {
     await this.projectRuntimeService.requireScrumWorkspaceRuntimeProject(workspacePublicId, projectPublicId)
     const items = await this.repo.listByProject(workspacePublicId, projectPublicId)
     return applyWorkItemAssignmentListFilter(items, actor, assignmentFilter)
+  }
+
+  async listBacklogItemsPage(
+    actor: WorkspaceMemberState,
+    workspacePublicId: string,
+    projectPublicId: string,
+    page: number,
+    pageSize: number,
+    assignmentFilter?: WorkItemAssignmentListFilter,
+  ): Promise<{
+    items: ScrumBacklogItemState[]
+    page: number
+    pageSize: number
+    total: number
+    hasNextPage: boolean
+  }> {
+    assertCanReadScrumBacklog(actor)
+    await this.projectRuntimeService.requireScrumWorkspaceRuntimeProject(workspacePublicId, projectPublicId)
+    const assignmentWhere = buildWorkItemAssignmentListWhere(actor, assignmentFilter)
+    const safePage = Math.max(1, page)
+    const safePageSize = Math.min(100, Math.max(1, pageSize))
+    const skip = (safePage - 1) * safePageSize
+    const [total, items] = await Promise.all([
+      this.repo.countByProject(workspacePublicId, projectPublicId, assignmentWhere),
+      this.repo.listByProjectPage(workspacePublicId, projectPublicId, {
+        skip,
+        take: safePageSize,
+        assignmentWhere,
+      }),
+    ])
+    return {
+      items,
+      page: safePage,
+      pageSize: safePageSize,
+      total,
+      hasNextPage: skip + items.length < total,
+    }
   }
 
   async getBacklogItem(

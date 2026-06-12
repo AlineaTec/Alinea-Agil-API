@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto"
 import type { WorkActivityNotificationFanoutService } from "../../work-activity-notifications/services/work-activity-notification-fanout.service.js"
 import { acceptanceCriteriaSummaryFromFrozen } from "../../project-scrum-backlog/domain/acceptance-criterion-closure.js"
 import { acceptanceCriteriaSummary } from "../../project-scrum-backlog/domain/acceptance-criterion.js"
+import type { ScrumBacklogItemState } from "../../project-scrum-backlog/domain/scrum-backlog-item.js"
 import type { ScrumBacklogRepository } from "../../project-scrum-backlog/persistence/scrum-backlog.repository.js"
+import type { ScrumCarryoverDerivationService } from "../../project-scrum-carryover/services/scrum-carryover-derivation.service.js"
+import {
+  emptyScrumCarryoverJsonFields,
+  type ScrumCarryoverJsonFields,
+} from "../../project-scrum-carryover/domain/scrum-carryover-fields.js"
 import type { ScrumSprintState } from "../../project-scrum-sprint-planning/domain/scrum-sprint.js"
 import type { ScrumSprintPlanningRepository } from "../../project-scrum-sprint-planning/persistence/scrum-sprint-planning.repository.js"
 import { sprintStateToJson } from "../../project-scrum-sprint-planning/services/sprint-planning.service.js"
@@ -27,12 +33,46 @@ export type SprintBoardItemRow = {
   acceptanceCriteriaSummary: ReturnType<typeof acceptanceCriteriaSummary>
   /** Comentarios no eliminados (soft delete). @see work-item-comments */
   commentsCount: number
+  assignedUserPublicId: string | null
+  assignmentUpdatedAt: Date | null
+  assignmentUpdatedByUserPublicId: string | null
+  storyPoints: number | null
+  priorityLevel: ScrumBacklogItemState["priorityLevel"]
+  parentItemPublicId: string | null
+  isCarryover: boolean
+  lastNotCompletedSprintPublicId: string | null
+  lastNotCompletedSprintName: string | null
+  lastNotCompletedClosedAt: string | null
+}
+
+export type SprintBoardHierarchyItem = {
+  backlogItemPublicId: string
+  itemType: string
+  title: string
+  parentItemPublicId: string | null
 }
 
 export type SprintBoardView = {
   sprint: ReturnType<typeof sprintStateToJson>
   columns: readonly string[]
   items: SprintBoardItemRow[]
+  /** Ancestros mínimos para jerarquía/epic en UI (no lista completa de backlog). */
+  hierarchyContext: SprintBoardHierarchyItem[]
+}
+
+function carryoverToRowFields(c: ScrumCarryoverJsonFields): Pick<
+  SprintBoardItemRow,
+  | "isCarryover"
+  | "lastNotCompletedSprintPublicId"
+  | "lastNotCompletedSprintName"
+  | "lastNotCompletedClosedAt"
+> {
+  return {
+    isCarryover: c.isCarryover,
+    lastNotCompletedSprintPublicId: c.lastNotCompletedSprintPublicId,
+    lastNotCompletedSprintName: c.lastNotCompletedSprintName,
+    lastNotCompletedClosedAt: c.lastNotCompletedClosedAt,
+  }
 }
 
 export class SprintBoardService {
@@ -40,10 +80,72 @@ export class SprintBoardService {
     private readonly sprintRepo: ScrumSprintPlanningRepository,
     private readonly backlogRepo: ScrumBacklogRepository,
     private readonly projectRuntimeService: ProjectRuntimeService,
+    private readonly carryoverDerivation: ScrumCarryoverDerivationService,
     private readonly workControls: WorkReadyDoneControlsService | null = null,
     private readonly auditLogRepository: WorkspaceAuditLogRepository | null = null,
     private readonly workActivityNotifications: WorkActivityNotificationFanoutService | null = null,
   ) {}
+
+  private async buildHierarchyContext(
+    workspacePublicId: string,
+    projectPublicId: string,
+    boardItems: ScrumBacklogItemState[],
+  ): Promise<SprintBoardHierarchyItem[]> {
+    const byId = new Map<string, SprintBoardHierarchyItem>()
+    const add = (row: ScrumBacklogItemState) => {
+      if (byId.has(row.backlogItemPublicId)) return
+      byId.set(row.backlogItemPublicId, {
+        backlogItemPublicId: row.backlogItemPublicId,
+        itemType: row.itemType,
+        title: row.title,
+        parentItemPublicId: row.parentItemPublicId,
+      })
+    }
+    for (const item of boardItems) {
+      add(item)
+      let parentId = item.parentItemPublicId
+      const seen = new Set<string>()
+      while (parentId && !seen.has(parentId)) {
+        seen.add(parentId)
+        if (byId.has(parentId)) break
+        const parent = await this.backlogRepo.findByProjectAndItemId(
+          workspacePublicId,
+          projectPublicId,
+          parentId,
+        )
+        if (!parent) break
+        add(parent)
+        parentId = parent.parentItemPublicId
+      }
+    }
+    return [...byId.values()]
+  }
+
+  private enrichBoardItemRow(
+    item: ScrumBacklogItemState,
+    col: SprintBoardColumn,
+    sprintSortOrder: number,
+    carry: ScrumCarryoverJsonFields,
+    acceptanceSummary: ReturnType<typeof acceptanceCriteriaSummary>,
+  ): SprintBoardItemRow {
+    return {
+      backlogItemPublicId: item.backlogItemPublicId,
+      itemType: item.itemType,
+      title: item.title,
+      backlogStatus: item.status,
+      boardColumn: col,
+      sprintSortOrder,
+      acceptanceCriteriaSummary: acceptanceSummary,
+      commentsCount: item.commentsCount,
+      assignedUserPublicId: item.assignedUserPublicId,
+      assignmentUpdatedAt: item.assignmentUpdatedAt,
+      assignmentUpdatedByUserPublicId: item.assignmentUpdatedByUserPublicId,
+      storyPoints: item.storyPoints,
+      priorityLevel: item.priorityLevel,
+      parentItemPublicId: item.parentItemPublicId,
+      ...carryoverToRowFields(carry),
+    }
+  }
 
   async startSprint(
     workspacePublicId: string,
@@ -140,12 +242,26 @@ export class SprintBoardService {
         throw new SprintBoardValidationError("Closed sprint is missing closure snapshot data.")
       }
       const items: SprintBoardItemRow[] = []
+      const liveItems: ScrumBacklogItemState[] = []
+      const liveById = new Map<string, ScrumBacklogItemState>()
       for (const row of sprint.closure.items) {
         const live = await this.backlogRepo.findByProjectAndItemId(
           workspacePublicId,
           projectPublicId,
           row.backlogItemPublicId,
         )
+        if (live) {
+          liveItems.push(live)
+          liveById.set(live.backlogItemPublicId, live)
+        }
+      }
+      const carryMap = await this.carryoverDerivation.deriveForBacklogItems(
+        workspacePublicId,
+        projectPublicId,
+        liveItems.map((i) => i.backlogItemPublicId),
+      )
+      for (const row of sprint.closure.items) {
+        const live = liveById.get(row.backlogItemPublicId)
         const summary =
           row.acceptanceCriteriaTotalCount !== undefined &&
           row.acceptanceCriteriaPendingCount !== undefined &&
@@ -158,21 +274,38 @@ export class SprintBoardService {
                 acceptanceCriteriaReviewedCount: row.acceptanceCriteriaReviewedCount,
               })
             : acceptanceCriteriaSummary(live?.acceptanceCriteria ?? [])
-        items.push({
-          backlogItemPublicId: row.backlogItemPublicId,
-          itemType: row.itemType,
-          title: row.title,
-          backlogStatus: row.backlogStatusAtClosure,
-          boardColumn: row.finalBoardColumn,
-          sprintSortOrder: row.sprintSortOrder,
-          acceptanceCriteriaSummary: summary,
-          commentsCount: live?.commentsCount ?? 0,
-        })
+        const carry = live
+          ? carryMap.get(live.backlogItemPublicId) ?? emptyScrumCarryoverJsonFields()
+          : emptyScrumCarryoverJsonFields()
+        if (live) {
+          items.push(
+            this.enrichBoardItemRow(live, row.finalBoardColumn, row.sprintSortOrder, carry, summary),
+          )
+        } else {
+          items.push({
+            backlogItemPublicId: row.backlogItemPublicId,
+            itemType: row.itemType,
+            title: row.title,
+            backlogStatus: row.backlogStatusAtClosure,
+            boardColumn: row.finalBoardColumn,
+            sprintSortOrder: row.sprintSortOrder,
+            acceptanceCriteriaSummary: summary,
+            commentsCount: 0,
+            assignedUserPublicId: null,
+            assignmentUpdatedAt: null,
+            assignmentUpdatedByUserPublicId: null,
+            storyPoints: null,
+            priorityLevel: "none",
+            parentItemPublicId: null,
+            ...carryoverToRowFields(carry),
+          })
+        }
       }
       return {
         sprint: sprintStateToJson(sprint),
         columns: SPRINT_BOARD_COLUMNS,
         items,
+        hierarchyContext: await this.buildHierarchyContext(workspacePublicId, projectPublicId, liveItems),
       }
     }
 
@@ -189,6 +322,8 @@ export class SprintBoardService {
     )
 
     const items: SprintBoardItemRow[] = []
+    const boardItemStates: ScrumBacklogItemState[] = []
+    const boardIds: string[] = []
 
     for (const m of memberships) {
       const item = await this.backlogRepo.findByProjectAndItemId(
@@ -200,25 +335,31 @@ export class SprintBoardService {
       if (item.itemType !== "user_story" && item.itemType !== "task") {
         continue
       }
+      boardItemStates.push(item)
+      boardIds.push(item.backlogItemPublicId)
+    }
 
+    const carryMap = await this.carryoverDerivation.deriveForBacklogItems(
+      workspacePublicId,
+      projectPublicId,
+      boardIds,
+    )
+
+    for (const m of memberships) {
+      const item = boardItemStates.find((i) => i.backlogItemPublicId === m.backlogItemPublicId)
+      if (!item) continue
       const col: SprintBoardColumn = m.boardColumn ?? "to_do"
-
-      items.push({
-        backlogItemPublicId: item.backlogItemPublicId,
-        itemType: item.itemType,
-        title: item.title,
-        backlogStatus: item.status,
-        boardColumn: col,
-        sprintSortOrder: m.sprintSortOrder,
-        acceptanceCriteriaSummary: acceptanceCriteriaSummary(item.acceptanceCriteria),
-        commentsCount: item.commentsCount,
-      })
+      const carry = carryMap.get(item.backlogItemPublicId) ?? emptyScrumCarryoverJsonFields()
+      items.push(
+        this.enrichBoardItemRow(item, col, m.sprintSortOrder, carry, acceptanceCriteriaSummary(item.acceptanceCriteria)),
+      )
     }
 
     return {
       sprint: sprintStateToJson(sprint),
       columns: SPRINT_BOARD_COLUMNS,
       items,
+      hierarchyContext: await this.buildHierarchyContext(workspacePublicId, projectPublicId, boardItemStates),
     }
   }
 

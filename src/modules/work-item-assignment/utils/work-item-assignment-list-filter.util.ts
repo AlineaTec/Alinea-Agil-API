@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client"
 import type { WorkspaceMemberState } from "../../workspace-users/domain/workspace-member.js"
 
 export type WorkItemAssignmentListFilter = {
@@ -26,4 +27,23 @@ export function applyWorkItemAssignmentListFilter<T extends { assignedUserPublic
     result = result.filter((i) => i.assignedUserPublicId === filter.assigneeUserPublicId)
   }
   return result
+}
+
+/** Cláusula Prisma AND-compatible para los mismos filtros de asignación del listado. */
+export function buildWorkItemAssignmentListWhere(
+  actor: WorkspaceMemberState,
+  filter: WorkItemAssignmentListFilter | undefined,
+): Prisma.WorkItemWhereInput {
+  if (!filter) return {}
+  const and: Prisma.WorkItemWhereInput[] = []
+  if (filter.unassigned === true) {
+    and.push({ assigned_user_public_id: null })
+  }
+  if (filter.assignee === "me") {
+    and.push({ assigned_user_public_id: actor.userPublicId })
+  }
+  if (filter.assigneeUserPublicId) {
+    and.push({ assigned_user_public_id: filter.assigneeUserPublicId })
+  }
+  return and.length > 0 ? { AND: and } : {}
 }

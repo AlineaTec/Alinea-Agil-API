@@ -297,7 +297,7 @@ describe("ProjectAssignableUsersService (in-memory)", () => {
     assert.deepEqual(ids, [USER_A, USER_B].sort())
   })
 
-  it("treats memberships without isActive as active (alinea con la semántica histórica de membresías activas
+  it("treats memberships without isActive as active (alinea con la semántica histórica de membresías activas)", async () => {
     const now = new Date()
     await links.insert({
       teamProjectLinkPublicId: randomUUID(),

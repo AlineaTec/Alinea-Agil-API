@@ -50,11 +50,24 @@ export type KanbanBoardSnapshotColumnDto = {
   policyText: string
   wipEnforcement: KanbanWipEnforcement
   cards: KanbanBoardCardSnapshotDto[]
+  /** Presente cuando la petición incluye `itemsPerColumn`. */
+  totalItems?: number
+  hasMore?: boolean
 }
 
 export type KanbanBoardSnapshotDto = {
   columns: KanbanBoardSnapshotColumnDto[]
   flowUpdatedAt: string
+}
+
+export type KanbanBoardColumnItemsPageDto = {
+  columnPublicId: string
+  cards: KanbanBoardCardSnapshotDto[]
+  totalItems: number
+  hasMore: boolean
+  nextOffset: number | null
+  /** Keyset cursor (sort_order + public_id) cuando la petición usa `afterSortOrder`/`afterPublicId`. */
+  nextCursor: { sortOrder: number; backlogItemPublicId: string } | null
 }
 
 function normalizeBlockedReason(raw: string | undefined | null): string | null {
@@ -104,42 +117,121 @@ export class KanbanBoardService {
     actor: WorkspaceMemberState,
     workspacePublicId: string,
     projectPublicId: string,
+    options?: { itemsPerColumn?: number },
   ): Promise<KanbanBoardSnapshotDto> {
     assertCanReadKanbanBoard(actor)
     await this.projectRuntimeService.requireKanbanWorkspaceRuntimeProject(workspacePublicId, projectPublicId)
     const flow = await this.kanbanFlowService.getFlowConfigOrThrow(workspacePublicId, projectPublicId)
-    const items = await this.repo.listKanbanBoardItems(workspacePublicId, projectPublicId)
-    const byColumn = new Map<string, ScrumBacklogItemState[]>()
-    for (const col of flow.columns) {
-      byColumn.set(col.columnPublicId, [])
-    }
-    for (const item of items) {
-      const colId = item.kanbanColumnPublicId
-      if (!colId) continue
-      const list = byColumn.get(colId)
-      if (list) {
-        list.push(item)
-      }
-    }
     const columnsSorted = flow.columns.slice().sort((a, b) => a.position - b.position)
-    const columns: KanbanBoardSnapshotColumnDto[] = columnsSorted.map((col) => {
-      const colItems = (byColumn.get(col.columnPublicId) ?? []).slice().sort((a, b) => {
-        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-        return a.createdAt.getTime() - b.createdAt.getTime()
-      })
-      return {
-        columnPublicId: col.columnPublicId,
-        name: col.name,
-        position: col.position,
-        wipLimit: col.wipLimit,
-        policyText: col.policyText,
-        wipEnforcement: col.wipEnforcement,
-        cards: colItems.map((it) => itemToCardDto(it, col.columnPublicId)),
-      }
-    })
+    const limit =
+      options?.itemsPerColumn !== undefined
+        ? Math.min(100, Math.max(1, Math.floor(options.itemsPerColumn)))
+        : null
+
+    const columns: KanbanBoardSnapshotColumnDto[] =
+      limit !== null
+        ? await Promise.all(
+            columnsSorted.map(async (col) => {
+              const [totalItems, colItems] = await Promise.all([
+                this.repo.countItemsInKanbanColumn(workspacePublicId, projectPublicId, col.columnPublicId),
+                this.repo.listKanbanBoardItemsByColumn(workspacePublicId, projectPublicId, col.columnPublicId, {
+                  skip: 0,
+                  take: limit,
+                }),
+              ])
+              return {
+                columnPublicId: col.columnPublicId,
+                name: col.name,
+                position: col.position,
+                wipLimit: col.wipLimit,
+                policyText: col.policyText,
+                wipEnforcement: col.wipEnforcement,
+                cards: colItems.map((it) => itemToCardDto(it, col.columnPublicId)),
+                totalItems,
+                hasMore: totalItems > colItems.length,
+              }
+            }),
+          )
+        : await (async () => {
+            const items = await this.repo.listKanbanBoardItems(workspacePublicId, projectPublicId)
+            const byColumn = new Map<string, ScrumBacklogItemState[]>()
+            for (const col of flow.columns) {
+              byColumn.set(col.columnPublicId, [])
+            }
+            for (const item of items) {
+              const colId = item.kanbanColumnPublicId
+              if (!colId) continue
+              const list = byColumn.get(colId)
+              if (list) {
+                list.push(item)
+              }
+            }
+            return columnsSorted.map((col) => {
+              const colItems = (byColumn.get(col.columnPublicId) ?? []).slice().sort((a, b) => {
+                if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+                return a.createdAt.getTime() - b.createdAt.getTime()
+              })
+              return {
+                columnPublicId: col.columnPublicId,
+                name: col.name,
+                position: col.position,
+                wipLimit: col.wipLimit,
+                policyText: col.policyText,
+                wipEnforcement: col.wipEnforcement,
+                cards: colItems.map((it) => itemToCardDto(it, col.columnPublicId)),
+              }
+            })
+          })()
     return {
       columns,
       flowUpdatedAt: flow.updatedAt.toISOString(),
+    }
+  }
+
+  async getColumnItemsPage(
+    actor: WorkspaceMemberState,
+    workspacePublicId: string,
+    projectPublicId: string,
+    columnPublicId: string,
+    offset: number,
+    limit: number,
+    cursor?: { afterSortOrder: number; afterPublicId: string },
+  ): Promise<KanbanBoardColumnItemsPageDto> {
+    assertCanReadKanbanBoard(actor)
+    await this.projectRuntimeService.requireKanbanWorkspaceRuntimeProject(workspacePublicId, projectPublicId)
+    const flow = await this.kanbanFlowService.getFlowConfigOrThrow(workspacePublicId, projectPublicId)
+    const column = flow.columns.find((c) => c.columnPublicId === columnPublicId)
+    if (!column) {
+      throw new KanbanBoardNotFoundError("Kanban column not found.")
+    }
+    const safeOffset = Math.max(0, Math.floor(offset))
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)))
+    const useCursor = cursor !== undefined
+    const [totalItems, items] = await Promise.all([
+      this.repo.countItemsInKanbanColumn(workspacePublicId, projectPublicId, columnPublicId),
+      this.repo.listKanbanBoardItemsByColumn(workspacePublicId, projectPublicId, columnPublicId, {
+        skip: useCursor ? 0 : safeOffset,
+        take: safeLimit,
+        afterSortOrder: cursor?.afterSortOrder,
+        afterPublicId: cursor?.afterPublicId,
+      }),
+    ])
+    const nextOffset = safeOffset + items.length
+    const last = items[items.length - 1]
+    const hasMore = useCursor
+      ? items.length === safeLimit && items.length < totalItems
+      : nextOffset < totalItems
+    const nextCursor =
+      hasMore && last
+        ? { sortOrder: last.sortOrder, backlogItemPublicId: last.backlogItemPublicId }
+        : null
+    return {
+      columnPublicId,
+      cards: items.map((it) => itemToCardDto(it, columnPublicId)),
+      totalItems,
+      hasMore,
+      nextOffset: useCursor ? null : hasMore ? nextOffset : null,
+      nextCursor,
     }
   }
 

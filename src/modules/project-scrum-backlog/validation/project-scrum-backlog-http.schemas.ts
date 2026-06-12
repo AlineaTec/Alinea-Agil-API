@@ -44,6 +44,8 @@ export const scrumBacklogItemsListQuerySchema = z
     unassigned: z.enum(["true", "false"]).optional(),
     assignee: z.enum(["me"]).optional(),
     assigneeUserPublicId: z.string().uuid().optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).optional(),
   })
   .strict()
 

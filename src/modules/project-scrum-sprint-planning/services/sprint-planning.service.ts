@@ -10,6 +10,8 @@ import {
 import { SPRINT_STATUSES_BLOCKING_OTHER_COMMITMENT } from "../domain/sprint-status.js"
 import type { ScrumSprintPlanningRepository } from "../persistence/scrum-sprint-planning.repository.js"
 import { formatDateOnly, parseDateOnlyToUtcNoon } from "../validation/sprint-planning-http.schemas.js"
+import { acceptanceCriteriaSummary } from "../../project-scrum-backlog/domain/acceptance-criterion.js"
+import type { AcceptanceCriteriaSummaryJson } from "../../project-scrum-backlog/domain/acceptance-criterion.js"
 import type { WorkReadyDoneControlsService } from "../../work-ready-done-controls/services/work-ready-done-controls.service.js"
 import type { WorkspaceMemberState } from "../../workspace-users/domain/workspace-member.js"
 import type { WorkActivityNotificationFanoutService } from "../../work-activity-notifications/services/work-activity-notification-fanout.service.js"
@@ -37,7 +39,18 @@ export type CommittedItemRow = {
     status: string
     storyPoints: number | null
     priorityLevel: string
+    acceptanceCriteriaSummary: AcceptanceCriteriaSummaryJson
   }
+}
+
+export type AvailableCommitItemRow = {
+  backlogItemPublicId: string
+  itemType: string
+  title: string
+  status: string
+  storyPoints: number | null
+  priorityLevel: string
+  acceptanceCriteriaSummary: AcceptanceCriteriaSummaryJson
 }
 
 export class SprintPlanningService {
@@ -265,10 +278,56 @@ export class SprintPlanningService {
           status: item.status,
           storyPoints: item.storyPoints,
           priorityLevel: item.priorityLevel,
+          acceptanceCriteriaSummary: acceptanceCriteriaSummary(item.acceptanceCriteria),
         },
       })
     }
     return rows
+  }
+
+  async listAvailableCommitItems(
+    workspacePublicId: string,
+    projectPublicId: string,
+    sprintPublicId: string,
+    options: { q?: string; page: number; pageSize: number },
+  ): Promise<{ items: AvailableCommitItemRow[]; total: number; hasNextPage: boolean }> {
+    await this.projectRuntimeService.requireScrumWorkspaceRuntimeProject(workspacePublicId, projectPublicId)
+    await this.requireSprint(workspacePublicId, projectPublicId, sprintPublicId)
+
+    const memberships = await this.sprintRepo.listMembershipsBySprintOrdered(
+      workspacePublicId,
+      projectPublicId,
+      sprintPublicId,
+    )
+    const committedIds = memberships.map((m) => m.backlogItemPublicId)
+    const page = Math.max(1, Math.floor(options.page))
+    const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize)))
+    const skip = (page - 1) * pageSize
+
+    const [total, items] = await Promise.all([
+      this.backlogRepo.countAvailableSprintCommitItems(workspacePublicId, projectPublicId, committedIds, {
+        q: options.q,
+      }),
+      this.backlogRepo.listAvailableSprintCommitItems(workspacePublicId, projectPublicId, committedIds, {
+        q: options.q,
+        skip,
+        take: pageSize,
+      }),
+    ])
+
+    return {
+      items: items.map((item) => ({
+        backlogItemPublicId: item.backlogItemPublicId,
+        itemType: item.itemType,
+        title: item.title,
+        status: item.status,
+        storyPoints: item.storyPoints,
+        priorityLevel: item.priorityLevel,
+        acceptanceCriteriaSummary: acceptanceCriteriaSummary(item.acceptanceCriteria),
+      })),
+      total,
+      hasNextPage: skip + items.length < total,
+    }
   }
 
   async commitBacklogItemToSprint(

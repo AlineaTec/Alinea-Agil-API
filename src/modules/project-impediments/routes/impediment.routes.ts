@@ -19,6 +19,7 @@ import {
   dismissImpedimentBodySchema,
   impedimentMountParamsSchema,
   impedimentPathParamsSchema,
+  impedimentWorkItemOptionsQuerySchema,
   listImpedimentsQuerySchema,
   parseStatusFilter,
   patchImpedimentBodySchema,
@@ -122,6 +123,40 @@ export function createProjectImpedimentsRouter(
   const router = Router({ mergeParams: true })
   router.use(workspaceUsersAuthMiddlewares(authBearerService, workspaceUserService))
   router.use(billingPrimaryProductMutationGate)
+
+  router.get("/work-item-options", async (req, res, next) => {
+    try {
+      const parsed = impedimentMountParamsSchema.safeParse(req.params)
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "invalid_path_params",
+          message: "Invalid workspace or project id.",
+          details: parsed.error.flatten(),
+        })
+        return
+      }
+      const q = impedimentWorkItemOptionsQuerySchema.safeParse(req.query)
+      if (!q.success) {
+        res.status(400).json({
+          error: "invalid_query",
+          message: "Invalid query parameters.",
+          details: q.error.flatten(),
+        })
+        return
+      }
+      const actor = getRequiredActor(res)
+      const { workspacePublicId, projectPublicId } = parsed.data
+      const items = await impedimentService.listWorkItemOptions(actor, workspacePublicId, projectPublicId, {
+        q: q.data.q,
+        limit: q.data.limit ?? 20,
+        sprintPublicId: q.data.sprintPublicId,
+        includeWorkItemPublicId: q.data.includeWorkItemPublicId,
+      })
+      res.status(200).json({ items })
+    } catch (err) {
+      respondImpedimentError(err, res, next)
+    }
+  })
 
   router.get("/", async (req, res, next) => {
     try {

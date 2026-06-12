@@ -306,7 +306,7 @@ describe("OperatingSnapshotService", () => {
     const actor = smActor()
     const first = await svc.getOperatingSnapshot(actor, W, P)
     const key = first.nextBestAction!.dismissSnoozeKey
-    await svc.snoozeNba(actor, W, P, { snoozeKey: key, snoozedUntilOperationalDate: "2026-05-19" })
+    await svc.snoozeNba(actor, W, P, { snoozeKey: key, snoozedUntilOperationalDate: "2099-12-31" })
     const second = await svc.getOperatingSnapshot(actor, W, P, { forceRefresh: true })
     assert.equal(second.nextBestAction?.suppressedBySnooze, true)
   })

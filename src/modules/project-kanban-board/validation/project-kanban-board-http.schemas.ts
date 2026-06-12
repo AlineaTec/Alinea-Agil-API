@@ -5,6 +5,31 @@ import { kanbanBacklogItemPathParamsSchema, kanbanBacklogMountParamsSchema } fro
 export const kanbanBoardMountParamsSchema = kanbanBacklogMountParamsSchema
 export const kanbanBoardItemPathParamsSchema = kanbanBacklogItemPathParamsSchema
 
+export const kanbanBoardSnapshotQuerySchema = z
+  .object({
+    itemsPerColumn: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict()
+
+export const kanbanBoardColumnItemsPathParamsSchema = kanbanBoardMountParamsSchema.extend({
+  columnPublicId: z.string().uuid(),
+})
+
+export const kanbanBoardColumnItemsQuerySchema = z
+  .object({
+    offset: z.coerce.number().int().min(0).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    afterSortOrder: z.coerce.number().int().optional(),
+    afterPublicId: z.string().uuid().optional(),
+  })
+  .strict()
+  .refine(
+    (q) =>
+      (q.afterSortOrder === undefined && q.afterPublicId === undefined) ||
+      (q.afterSortOrder !== undefined && q.afterPublicId !== undefined),
+    { message: "afterSortOrder and afterPublicId must be provided together." },
+  )
+
 export const moveKanbanBoardItemBodySchema = z
   .object({
     to_column_public_id: z.string().uuid(),

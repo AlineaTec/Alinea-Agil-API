@@ -7,12 +7,14 @@ import type { ProjectRuntimeService } from "../workspace-project-runtime/service
 import type { WorkReadyDoneControlsService } from "../work-ready-done-controls/services/work-ready-done-controls.service.js"
 import type { WorkspaceUserService } from "../workspace-users/services/workspace-user.service.js"
 import type { WorkActivityNotificationFanoutService } from "../work-activity-notifications/services/work-activity-notification-fanout.service.js"
+import type { ScrumCarryoverDerivationService } from "../project-scrum-carryover/services/scrum-carryover-derivation.service.js"
 import { createProjectScrumSprintBoardRouter } from "./routes/project-scrum-sprint-board.routes.js"
 import { SprintBoardService } from "./services/sprint-board.service.js"
 
 export type CreateSprintBoardServiceOptions = {
   sprintRepo: ScrumSprintPlanningRepository
   backlogRepo: ScrumBacklogRepository
+  carryoverDerivation: ScrumCarryoverDerivationService
 }
 
 export function createSprintBoardService(
@@ -26,6 +28,7 @@ export function createSprintBoardService(
     options.sprintRepo,
     options.backlogRepo,
     projectRuntimeService,
+    options.carryoverDerivation,
     workReadyDoneControlsService,
     auditLogRepository,
     workActivityNotifications,

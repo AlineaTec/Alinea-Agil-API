@@ -2,7 +2,7 @@ import { emptyMaterializationMeta } from "../../../modules/workspace-projects/do
 import { ProjectDraftPrismaRepository } from "../../../modules/workspace-projects/persistence/prisma/project-draft.prisma-repository.js"
 import { ProjectRuntimePrismaRepository } from "../../../modules/workspace-project-runtime/persistence/prisma/project-runtime.prisma-repository.js"
 import type { OperationalApproach } from "../../../modules/workspace-project-runtime/domain/operational-approach.js"
-import { defaultInitialConfigurationSummary } from "../../../modules/workspace-project-runtime/domain/initial-configuration-summary.js"
+import { initialConfigurationSummaryAfterMaterialization } from "../../../modules/workspace-project-runtime/domain/initial-configuration-summary.js"
 import type { SeedContext } from "./context.js"
 
 export type ProjectSeedOptions = {
@@ -66,7 +66,7 @@ export async function seedProject(
     sourceDraftPublicId: opts.draftPublicId,
     projectName: opts.projectName,
     operationalApproach: opts.approach,
-    initialConfigurationSummary: defaultInitialConfigurationSummary(opts.approach),
+    initialConfigurationSummary: initialConfigurationSummaryAfterMaterialization(opts.approach),
     status: "active",
     materializedAt: now,
     createdAt: now,

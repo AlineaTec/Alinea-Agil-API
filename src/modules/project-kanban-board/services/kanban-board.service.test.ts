@@ -84,6 +84,30 @@ class MemRepo implements ScrumBacklogRepository {
     return []
   }
 
+  async listByProjectPage(): Promise<ScrumBacklogItemState[]> {
+    return []
+  }
+
+  async countByProject(): Promise<number> {
+    return 0
+  }
+
+  async searchWorkItemOptions(): Promise<never[]> {
+    return []
+  }
+
+  async listRoadmapWorkItems(): Promise<never[]> {
+    return []
+  }
+
+  async listAvailableSprintCommitItems(): Promise<never[]> {
+    return []
+  }
+
+  async countAvailableSprintCommitItems(): Promise<number> {
+    return 0
+  }
+
   async maxSortOrderAmongSiblings(): Promise<number> {
     return -1
   }
@@ -118,22 +142,7 @@ class MemRepo implements ScrumBacklogRepository {
     return rows.map((r) => ({ ...r }))
   }
 
-  async listKanbanBoardItems(workspacePublicId: string, projectPublicId: string): Promise<ScrumBacklogItemState[]> {
-    return this.items
-      .filter(
-        (x) =>
-          x.workspacePublicId === workspacePublicId &&
-          x.projectPublicId === projectPublicId &&
-          x.kanbanColumnPublicId !== null,
-      )
-      .map((r) => ({ ...r }))
-      .sort((a, b) => {
-        const ca = String(a.kanbanColumnPublicId).localeCompare(String(b.kanbanColumnPublicId))
-        if (ca !== 0) return ca
-        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-        return a.createdAt.getTime() - b.createdAt.getTime()
-      })
-  }
+  fullListCalls = 0
 
   async countItemsInKanbanColumn(
     workspacePublicId: string,
@@ -158,6 +167,45 @@ class MemRepo implements ScrumBacklogRepository {
     const rows = await this.listKanbanBacklogItems(workspacePublicId, projectPublicId)
     if (rows.length === 0) return null
     return Math.min(...rows.map((r) => r.sortOrder))
+  }
+
+  async listKanbanBoardItemsByColumn(
+    workspacePublicId: string,
+    projectPublicId: string,
+    columnPublicId: string,
+    options: { skip: number; take: number },
+  ): Promise<ScrumBacklogItemState[]> {
+    return this.items
+      .filter(
+        (x) =>
+          x.workspacePublicId === workspacePublicId &&
+          x.projectPublicId === projectPublicId &&
+          x.kanbanColumnPublicId === columnPublicId,
+      )
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+        return a.createdAt.getTime() - b.createdAt.getTime()
+      })
+      .slice(options.skip, options.skip + options.take)
+      .map((r) => ({ ...r }))
+  }
+
+  async listKanbanBoardItems(workspacePublicId: string, projectPublicId: string): Promise<ScrumBacklogItemState[]> {
+    this.fullListCalls += 1
+    return this.items
+      .filter(
+        (x) =>
+          x.workspacePublicId === workspacePublicId &&
+          x.projectPublicId === projectPublicId &&
+          x.kanbanColumnPublicId !== null,
+      )
+      .map((r) => ({ ...r }))
+      .sort((a, b) => {
+        const ca = String(a.kanbanColumnPublicId).localeCompare(String(b.kanbanColumnPublicId))
+        if (ca !== 0) return ca
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+        return a.createdAt.getTime() - b.createdAt.getTime()
+      })
   }
 }
 
@@ -240,6 +288,22 @@ function makeBoard(flow: ProjectKanbanFlowConfigState) {
 }
 
 describe("KanbanBoardService", () => {
+  it("snapshot with itemsPerColumn uses per-column DB limit without full list", async () => {
+    const flow = flowTwoCols()
+    const { repo, board } = makeBoard(flow)
+    const manyA = Array.from({ length: 5 }, (_, i) =>
+      item({ title: `A${i}`, kanbanColumnPublicId: colA, sortOrder: i }),
+    )
+    repo.items = [...manyA, item({ title: "B0", kanbanColumnPublicId: colB, sortOrder: 0 })]
+    repo.fullListCalls = 0
+    const snap = await board.getBoardSnapshot(reader(), ws, proj, { itemsPerColumn: 2 })
+    assert.equal(repo.fullListCalls, 0)
+    const colAOut = snap.columns.find((c) => c.columnPublicId === colA)
+    assert.equal(colAOut?.cards.length, 2)
+    assert.equal(colAOut?.totalItems, 5)
+    assert.equal(colAOut?.hasMore, true)
+  })
+
   it("snapshot groups cards by column", async () => {
     const flow = flowTwoCols()
     const { repo, board } = makeBoard(flow)

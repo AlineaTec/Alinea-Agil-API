@@ -103,6 +103,10 @@ import {
   mountProjectScrumSprintPlanningModule,
 } from "./modules/project-scrum-sprint-planning/project-scrum-sprint-planning.module.js"
 import {
+  createRoadmapSummaryService,
+  mountProjectRoadmapModule,
+} from "./modules/project-roadmap/project-roadmap.module.js"
+import {
   createProjectImpedimentCommentsService,
   createImpedimentService,
   mountProjectImpedimentsModule,
@@ -143,6 +147,8 @@ import {
   GuidedRetrospectiveSessionsReportService,
   GuidedReviewSessionsReportService,
   GuidedSprintPlanningSessionsReportService,
+  createProjectPageBootstrapService,
+  mountProjectPageBootstrapModule,
   mountWorkspaceProjectRuntimeModule,
 } from "./modules/workspace-project-runtime/workspace-project-runtime.module.js"
 import {
@@ -548,7 +554,11 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
     workReadyDoneControlsService,
     workspaceAuditLogRepository,
     workActivityNotificationFanout,
-    { sprintRepo: scrumSprintPlanningRepository, backlogRepo: scrumBacklogRepository },
+    {
+      sprintRepo: scrumSprintPlanningRepository,
+      backlogRepo: scrumBacklogRepository,
+      carryoverDerivation: scrumCarryoverDerivationService,
+    },
   )
   const sprintClosureService = createSprintClosureService(projectRuntimeService, {
     sprintRepo: scrumSprintPlanningRepository,
@@ -684,6 +694,18 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
     workspaceUserService,
     billingPrimaryProductMutationGate,
   })
+  const projectPageBootstrapService = createProjectPageBootstrapService(
+    projectRuntimeService,
+    projectDraftService,
+    operatingSnapshotService,
+    scrumSprintPlanningRepository,
+  )
+  mountProjectPageBootstrapModule(app, {
+    pageBootstrapService: projectPageBootstrapService,
+    authBearerService,
+    workspaceUserService,
+    billingPrimaryProductMutationGate,
+  })
   mountGuidedRetrospectivePublicModule(app, {
     guidedRetrospectiveService,
     joinResolveRateLimit: createGuidedRetrospectiveJoinResolveRateLimiter(),
@@ -786,6 +808,12 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
     workspaceUserService,
     billingPrimaryProductMutationGate,
   })
+  const flowTimeService = createFlowTimeService(
+    projectRuntimeService,
+    kanbanFlowService,
+    scrumBacklogRepository,
+    workspaceAuditLogRepository,
+  )
   const kanbanMetricsService = createKanbanMetricsService(
     projectRuntimeService,
     kanbanFlowService,
@@ -794,16 +822,11 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
   )
   mountProjectKanbanMetricsModule(app, {
     kanbanMetricsService,
+    flowTimeService,
     authBearerService,
     workspaceUserService,
     billingPrimaryProductMutationGate,
   })
-  const flowTimeService = createFlowTimeService(
-    projectRuntimeService,
-    kanbanFlowService,
-    scrumBacklogRepository,
-    workspaceAuditLogRepository,
-  )
   mountProjectCycleLeadTimeModule(app, {
     flowTimeService,
     authBearerService,
@@ -868,6 +891,18 @@ export function createApp(): { app: Express; platformUsersService: PlatformUsers
   )
   mountProjectRhythmTrackingModule(app, {
     rhythmTrackingService: projectRhythmTrackingService,
+    authBearerService,
+    workspaceUserService,
+    billingPrimaryProductMutationGate,
+  })
+  const roadmapSummaryService = createRoadmapSummaryService(
+    projectRuntimeService,
+    scrumBacklogRepository,
+    scrumSprintPlanningRepository,
+    scrumCarryoverDerivationService,
+  )
+  mountProjectRoadmapModule(app, {
+    roadmapSummaryService,
     authBearerService,
     workspaceUserService,
     billingPrimaryProductMutationGate,

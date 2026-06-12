@@ -5,7 +5,11 @@ import type { WorkspaceUserService } from "../workspace-users/services/workspace
 import type { ProjectRuntimeRepository } from "./persistence/project-runtime.repository.js"
 import type { WorkTeamMembershipRepository } from "../workspace-work-teams/persistence/work-team-membership.repository.js"
 import type { WorkTeamProjectLinkRepository } from "../workspace-work-teams/persistence/work-team-project-link.repository.js"
+import type { OperatingSnapshotService } from "../project-operating-snapshot/services/operating-snapshot.service.js"
+import type { ScrumSprintPlanningRepository } from "../project-scrum-sprint-planning/persistence/scrum-sprint-planning.repository.js"
+import { createProjectPageBootstrapRouter } from "./routes/project-page-bootstrap.routes.js"
 import { createWorkspaceProjectRuntimeRouter } from "./routes/workspace-project-runtime.routes.js"
+import { ProjectPageBootstrapService } from "./services/project-page-bootstrap.service.js"
 import { ProjectRuntimeService } from "./services/project-runtime.service.js"
 
 export type CreateProjectRuntimeServiceWorkspaceDeps = {
@@ -25,6 +29,21 @@ export function createProjectRuntimeService(
 }
 
 export { ProjectRuntimeService } from "./services/project-runtime.service.js"
+export { ProjectPageBootstrapService } from "./services/project-page-bootstrap.service.js"
+
+export function createProjectPageBootstrapService(
+  projectRuntimeService: ProjectRuntimeService,
+  projectDraftService: import("../workspace-projects/services/project-draft.service.js").ProjectDraftService,
+  operatingSnapshotService: OperatingSnapshotService,
+  sprintRepo: ScrumSprintPlanningRepository,
+): ProjectPageBootstrapService {
+  return new ProjectPageBootstrapService(
+    projectRuntimeService,
+    projectDraftService,
+    operatingSnapshotService,
+    sprintRepo,
+  )
+}
 export { DeveloperHoursReportService } from "./services/developer-hours-report.service.js"
 export { AlignmentSessionsReportService } from "./services/alignment-sessions-report.service.js"
 export { GuidedRefinementSessionsReportService } from "./services/guided-refinement-sessions-report.service.js"
@@ -74,6 +93,29 @@ export function mountWorkspaceProjectRuntimeModule(
       options.guidedReviewSessionsReportService,
       options.guidedRetrospectiveSessionsReportService,
       options.guidedSprintPlanningSessionsReportService,
+      options.authBearerService,
+      options.workspaceUserService,
+      options.billingPrimaryProductMutationGate,
+    ),
+  )
+}
+
+export type MountProjectPageBootstrapModuleOptions = {
+  pageBootstrapService: ProjectPageBootstrapService
+  authBearerService: AuthBearerService
+  workspaceUserService: WorkspaceUserService
+  billingPrimaryProductMutationGate: RequestHandler
+}
+
+/** `GET .../projects/:projectPublicId/page-bootstrap` — montar tras `OperatingSnapshotService`. */
+export function mountProjectPageBootstrapModule(
+  app: Express,
+  options: MountProjectPageBootstrapModuleOptions,
+): void {
+  app.use(
+    "/v1/workspaces/:workspacePublicId/projects",
+    createProjectPageBootstrapRouter(
+      options.pageBootstrapService,
       options.authBearerService,
       options.workspaceUserService,
       options.billingPrimaryProductMutationGate,

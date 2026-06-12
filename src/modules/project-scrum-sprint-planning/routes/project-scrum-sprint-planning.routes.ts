@@ -30,6 +30,7 @@ import {
   WorkControlsValidationError,
 } from "../../work-ready-done-controls/domain/work-ready-done-controls.errors.js"
 import {
+  availableCommitItemsQuerySchema,
   commitBacklogItemBodySchema,
   createScrumSprintBodySchema,
   patchScrumSprintBodySchema,
@@ -242,6 +243,58 @@ export function createProjectScrumSprintPlanningRouter(
     }
   })
 
+  router.get("/:sprintPublicId/available-commit-items", async (req, res, next) => {
+    try {
+      const parsed = sprintPlanningSprintParamsSchema.safeParse(req.params)
+      if (!parsed.success) {
+        res.status(400).json({ error: "invalid_params", issues: parsed.error.flatten() })
+        return
+      }
+      const q = availableCommitItemsQuerySchema.safeParse(req.query)
+      if (!q.success) {
+        res.status(400).json({ error: "invalid_query", issues: q.error.flatten() })
+        return
+      }
+      const actor = getRequiredActor(res)
+      assertCanReadSprintPlanning(actor)
+      const result = await sprintPlanningService.listAvailableCommitItems(
+        parsed.data.workspacePublicId,
+        parsed.data.projectPublicId,
+        parsed.data.sprintPublicId,
+        {
+          q: q.data.q,
+          page: q.data.page ?? 1,
+          pageSize: q.data.pageSize ?? 50,
+        },
+      )
+      const carryMap = await carryoverDerivationService.deriveForBacklogItems(
+        parsed.data.workspacePublicId,
+        parsed.data.projectPublicId,
+        result.items.map((i) => i.backlogItemPublicId),
+      )
+      res.json({
+        items: result.items.map((item) => {
+          const carry = carryMap.get(item.backlogItemPublicId) ?? emptyScrumCarryoverJsonFields()
+          return {
+            ...item,
+            isCarryover: carry.isCarryover,
+            lastNotCompletedSprintPublicId: carry.lastNotCompletedSprintPublicId,
+            lastNotCompletedSprintName: carry.lastNotCompletedSprintName,
+            lastNotCompletedClosedAt: carry.lastNotCompletedClosedAt,
+          }
+        }),
+        pagination: {
+          total: result.total,
+          page: q.data.page ?? 1,
+          pageSize: q.data.pageSize ?? 50,
+          hasNextPage: result.hasNextPage,
+        },
+      })
+    } catch (err) {
+      respondSprintPlanningError(err, res, next)
+    }
+  })
+
   router.get("/:sprintPublicId/items", async (req, res, next) => {
     try {
       const parsed = sprintPlanningSprintParamsSchema.safeParse(req.params)
@@ -276,6 +329,7 @@ export function createProjectScrumSprintPlanningRouter(
             committedByUserPublicId: r.membership.committedByUserPublicId,
             backlogItem: {
               ...r.backlogItem,
+              acceptanceCriteriaSummary: r.backlogItem.acceptanceCriteriaSummary,
               isCarryover: carry.isCarryover,
               lastNotCompletedSprintPublicId: carry.lastNotCompletedSprintPublicId,
               lastNotCompletedSprintName: carry.lastNotCompletedSprintName,

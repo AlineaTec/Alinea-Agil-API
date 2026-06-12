@@ -1,5 +1,6 @@
 import type { Express, RequestHandler } from "express"
 import type { AuthBearerService } from "../login-session/services/auth-bearer.service.js"
+import type { FlowTimeService } from "../project-cycle-lead-time/services/flow-time.service.js"
 import type { KanbanFlowService } from "../project-kanban-core/services/kanban-flow.service.js"
 import { requireInjected } from "../../infrastructure/persistence/require-injected.js"
 import type { ScrumBacklogRepository } from "../project-scrum-backlog/persistence/scrum-backlog.repository.js"
@@ -27,6 +28,7 @@ export { KanbanMetricsService } from "./services/kanban-metrics.service.js"
 
 export type MountProjectKanbanMetricsModuleOptions = {
   kanbanMetricsService: KanbanMetricsService
+  flowTimeService: FlowTimeService
   authBearerService: AuthBearerService
   workspaceUserService: WorkspaceUserService
   billingPrimaryProductMutationGate: RequestHandler
@@ -40,6 +42,7 @@ export function mountProjectKanbanMetricsModule(
     "/v1/workspaces/:workspacePublicId/projects/:projectPublicId/kanban-metrics",
     createProjectKanbanMetricsRouter(
       options.kanbanMetricsService,
+      options.flowTimeService,
       options.authBearerService,
       options.workspaceUserService,
       options.billingPrimaryProductMutationGate,

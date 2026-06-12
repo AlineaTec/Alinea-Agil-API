@@ -176,6 +176,75 @@ export class ImpedimentService {
     return this.impediments.listByProject(workspacePublicId, projectPublicId, filters, pagination)
   }
 
+  async listWorkItemOptions(
+    actor: WorkspaceMemberState,
+    workspacePublicId: string,
+    projectPublicId: string,
+    options: {
+      q?: string
+      limit: number
+      sprintPublicId?: string
+      includeWorkItemPublicId?: string
+    },
+  ): Promise<
+    Array<{
+      workItemPublicId: string
+      title: string
+      itemType: string
+      status: string
+    }>
+  > {
+    assertCanReadProjectImpediments(actor)
+    const project = await this.requireWorkspaceRuntimeProject(workspacePublicId, projectPublicId)
+    const safeLimit = Math.min(50, Math.max(1, Math.floor(options.limit)))
+    const q = options.q?.trim()
+
+    let backlogItemPublicIds: string[] | undefined
+    if (project.operationalApproach === "scrum" && options.sprintPublicId) {
+      const memberships = await this.sprintPlanning.listMembershipsBySprintOrdered(
+        workspacePublicId,
+        projectPublicId,
+        options.sprintPublicId,
+      )
+      backlogItemPublicIds = memberships.map((m) => m.backlogItemPublicId)
+      if (backlogItemPublicIds.length === 0) return []
+    }
+
+    let rows = await this.backlog.searchWorkItemOptions(workspacePublicId, projectPublicId, {
+      q: q && q.length >= 2 ? q : undefined,
+      limit: safeLimit,
+      backlogItemPublicIds,
+      kanbanBacklogOnly: project.operationalApproach === "kanban",
+    })
+
+    const includeId = options.includeWorkItemPublicId?.trim()
+    if (includeId && !rows.some((r) => r.backlogItemPublicId === includeId)) {
+      const extra = await this.backlog.findByProjectAndItemId(
+        workspacePublicId,
+        projectPublicId,
+        includeId,
+      )
+      if (extra) {
+        rows = [
+          {
+            backlogItemPublicId: extra.backlogItemPublicId,
+            itemType: extra.itemType,
+            title: extra.title,
+            status: extra.status,
+          },
+          ...rows,
+        ].slice(0, safeLimit)
+      }
+    }
+
+    return rows.map((r) => ({
+      workItemPublicId: r.backlogItemPublicId,
+      title: r.title,
+      itemType: r.itemType,
+      status: r.status,
+    }))
+  }
+
   async getImpediment(
     actor: WorkspaceMemberState,
     workspacePublicId: string,

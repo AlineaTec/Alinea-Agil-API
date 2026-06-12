@@ -32,6 +32,9 @@ import {
   blockKanbanBoardItemBodySchema,
   kanbanBoardItemPathParamsSchema,
   kanbanBoardMountParamsSchema,
+  kanbanBoardColumnItemsPathParamsSchema,
+  kanbanBoardColumnItemsQuerySchema,
+  kanbanBoardSnapshotQuerySchema,
   moveKanbanBoardItemBodySchema,
   patchBlockedReasonBodySchema,
 } from "../validation/project-kanban-board-http.schemas.js"
@@ -151,6 +154,47 @@ export function createProjectKanbanBoardRouter(
   router.use(workspaceUsersAuthMiddlewares(authBearerService, workspaceUserService))
   router.use(billingPrimaryProductMutationGate)
 
+  router.get("/columns/:columnPublicId/items", async (req, res, next) => {
+    try {
+      const parsed = kanbanBoardColumnItemsPathParamsSchema.safeParse(req.params)
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "invalid_path_params",
+          message: "Invalid path parameters.",
+          details: parsed.error.flatten(),
+        })
+        return
+      }
+      const q = kanbanBoardColumnItemsQuerySchema.safeParse(req.query)
+      if (!q.success) {
+        res.status(400).json({
+          error: "invalid_query",
+          message: "Invalid query parameters.",
+          details: q.error.flatten(),
+        })
+        return
+      }
+      const { workspacePublicId, projectPublicId, columnPublicId } = parsed.data
+      const actor = getRequiredActor(res)
+      const cursor =
+        q.data.afterSortOrder !== undefined && q.data.afterPublicId
+          ? { afterSortOrder: q.data.afterSortOrder, afterPublicId: q.data.afterPublicId }
+          : undefined
+      const page = await kanbanBoardService.getColumnItemsPage(
+        actor,
+        workspacePublicId,
+        projectPublicId,
+        columnPublicId,
+        q.data.offset ?? 0,
+        q.data.limit ?? 50,
+        cursor,
+      )
+      res.status(200).json(page)
+    } catch (err) {
+      respondKanbanBoardError(err, res, next)
+    }
+  })
+
   router.get("/snapshot", async (req, res, next) => {
     try {
       const parsed = kanbanBoardMountParamsSchema.safeParse(req.params)
@@ -163,8 +207,19 @@ export function createProjectKanbanBoardRouter(
         return
       }
       const { workspacePublicId, projectPublicId } = parsed.data
+      const q = kanbanBoardSnapshotQuerySchema.safeParse(req.query)
+      if (!q.success) {
+        res.status(400).json({
+          error: "invalid_query",
+          message: "Invalid query parameters.",
+          details: q.error.flatten(),
+        })
+        return
+      }
       const actor = getRequiredActor(res)
-      const snapshot = await kanbanBoardService.getBoardSnapshot(actor, workspacePublicId, projectPublicId)
+      const snapshot = await kanbanBoardService.getBoardSnapshot(actor, workspacePublicId, projectPublicId, {
+        itemsPerColumn: q.data.itemsPerColumn,
+      })
       res.status(200).json(snapshot)
     } catch (err) {
       respondKanbanBoardError(err, res, next)

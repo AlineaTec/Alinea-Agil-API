@@ -141,16 +141,60 @@ export class ScrumBacklogPrismaRepository implements ScrumBacklogRepository {
     return row ? loadState(row as WorkItemWithParent) : null
   }
 
+  private projectItemsWhere(
+    workspacePublicId: string,
+    projectPublicId: string,
+    assignmentWhere?: Prisma.WorkItemWhereInput,
+  ): Prisma.WorkItemWhereInput {
+    const base: Prisma.WorkItemWhereInput = {
+      workspace_public_id: workspacePublicId,
+      project_public_id: projectPublicId,
+    }
+    if (!assignmentWhere || Object.keys(assignmentWhere).length === 0) {
+      return base
+    }
+    return { AND: [base, assignmentWhere] }
+  }
+
   async listByProject(
     workspacePublicId: string,
     projectPublicId: string,
   ): Promise<ScrumBacklogItemState[]> {
     const rows = await this.prisma.workItem.findMany({
-      where: { workspace_public_id: workspacePublicId, project_public_id: projectPublicId },
+      where: this.projectItemsWhere(workspacePublicId, projectPublicId),
       orderBy: [{ sort_order: "asc" }, { created_at: "asc" }],
       include: { parent_item: { select: { public_id: true } } },
     })
     return Promise.all(rows.map((r) => loadState(r as WorkItemWithParent)))
+  }
+
+  async listByProjectPage(
+    workspacePublicId: string,
+    projectPublicId: string,
+    options: {
+      skip: number
+      take: number
+      assignmentWhere?: Prisma.WorkItemWhereInput
+    },
+  ): Promise<ScrumBacklogItemState[]> {
+    const rows = await this.prisma.workItem.findMany({
+      where: this.projectItemsWhere(workspacePublicId, projectPublicId, options.assignmentWhere),
+      orderBy: [{ sort_order: "asc" }, { created_at: "asc" }],
+      skip: options.skip,
+      take: options.take,
+      include: { parent_item: { select: { public_id: true } } },
+    })
+    return Promise.all(rows.map((r) => loadState(r as WorkItemWithParent)))
+  }
+
+  async countByProject(
+    workspacePublicId: string,
+    projectPublicId: string,
+    assignmentWhere?: import("@prisma/client").Prisma.WorkItemWhereInput,
+  ): Promise<number> {
+    return this.prisma.workItem.count({
+      where: this.projectItemsWhere(workspacePublicId, projectPublicId, assignmentWhere),
+    })
   }
 
   async maxSortOrderAmongSiblings(
@@ -334,9 +378,205 @@ export class ScrumBacklogPrismaRepository implements ScrumBacklogRepository {
         project_public_id: projectPublicId,
         kanban_column_public_id: { not: null },
       },
-      orderBy: { sort_order: "asc" },
+      orderBy: [{ sort_order: "asc" }, { created_at: "asc" }],
       include: { parent_item: { select: { public_id: true } } },
     })
     return Promise.all(rows.map((r) => loadState(r as WorkItemWithParent)))
+  }
+
+  async listKanbanBoardItemsByColumn(
+    workspacePublicId: string,
+    projectPublicId: string,
+    columnPublicId: string,
+    options: { skip: number; take: number; afterSortOrder?: number; afterPublicId?: string },
+  ): Promise<ScrumBacklogItemState[]> {
+    const baseWhere: Prisma.WorkItemWhereInput = {
+      workspace_public_id: workspacePublicId,
+      project_public_id: projectPublicId,
+      kanban_column_public_id: columnPublicId,
+    }
+    let where: Prisma.WorkItemWhereInput = baseWhere
+    if (options.afterSortOrder !== undefined && options.afterPublicId) {
+      where = {
+        AND: [
+          baseWhere,
+          {
+            OR: [
+              { sort_order: { gt: options.afterSortOrder } },
+              {
+                AND: [
+                  { sort_order: options.afterSortOrder },
+                  { public_id: { gt: options.afterPublicId } },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+    }
+    const rows = await this.prisma.workItem.findMany({
+      where,
+      orderBy: [{ sort_order: "asc" }, { public_id: "asc" }],
+      skip: options.afterSortOrder !== undefined ? undefined : options.skip,
+      take: options.take,
+      include: { parent_item: { select: { public_id: true } } },
+    })
+    return Promise.all(rows.map((r) => loadState(r as WorkItemWithParent)))
+  }
+
+  async searchWorkItemOptions(
+    workspacePublicId: string,
+    projectPublicId: string,
+    options: {
+      q?: string
+      limit: number
+      backlogItemPublicIds?: string[]
+      kanbanBacklogOnly?: boolean
+    },
+  ): Promise<
+    Array<{
+      backlogItemPublicId: string
+      itemType: ScrumBacklogItemState["itemType"]
+      title: string
+      status: ScrumBacklogItemState["status"]
+    }>
+  > {
+    const q = options.q?.trim()
+    const and: Prisma.WorkItemWhereInput[] = [
+      { workspace_public_id: workspacePublicId },
+      { project_public_id: projectPublicId },
+    ]
+    if (options.kanbanBacklogOnly === true) {
+      and.push({ kanban_column_public_id: null })
+      and.push({ parent_item_id: null })
+    }
+    if (options.backlogItemPublicIds && options.backlogItemPublicIds.length > 0) {
+      and.push({ public_id: { in: options.backlogItemPublicIds } })
+    }
+    if (q && q.length >= 2) {
+      and.push({ title: { contains: q, mode: "insensitive" } })
+    }
+    const rows = await this.prisma.workItem.findMany({
+      where: { AND: and },
+      orderBy: [{ sort_order: "asc" }, { created_at: "asc" }],
+      take: options.limit,
+      select: {
+        public_id: true,
+        item_type: true,
+        title: true,
+        status: true,
+      },
+    })
+    return rows.map((r) => ({
+      backlogItemPublicId: r.public_id,
+      itemType: r.item_type as ScrumBacklogItemState["itemType"],
+      title: r.title,
+      status: r.status as ScrumBacklogItemState["status"],
+    }))
+  }
+
+  async listRoadmapWorkItems(
+    workspacePublicId: string,
+    projectPublicId: string,
+  ): Promise<
+    Array<{
+      backlogItemPublicId: string
+      itemType: string
+      title: string
+      status: string
+      sortOrder: number
+      priorityLevel: string
+      parentItemPublicId: string | null
+      createdAt: Date
+      updatedAt: Date
+      isBlocked: boolean
+    }>
+  > {
+    const rows = await this.prisma.workItem.findMany({
+      where: this.projectItemsWhere(workspacePublicId, projectPublicId),
+      orderBy: [{ sort_order: "asc" }, { created_at: "asc" }],
+      select: {
+        public_id: true,
+        item_type: true,
+        title: true,
+        status: true,
+        sort_order: true,
+        priority_level: true,
+        created_at: true,
+        updated_at: true,
+        is_blocked: true,
+        parent_item: { select: { public_id: true } },
+      },
+    })
+    return rows.map((r) => ({
+      backlogItemPublicId: r.public_id,
+      itemType: r.item_type,
+      title: r.title,
+      status: r.status,
+      sortOrder: r.sort_order,
+      priorityLevel: r.priority_level,
+      parentItemPublicId: r.parent_item?.public_id ?? null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      isBlocked: r.is_blocked,
+    }))
+  }
+
+  private availableSprintCommitWhere(
+    workspacePublicId: string,
+    projectPublicId: string,
+    excludeBacklogItemPublicIds: string[],
+    q?: string,
+  ): Prisma.WorkItemWhereInput {
+    const and: Prisma.WorkItemWhereInput[] = [
+      { workspace_public_id: workspacePublicId },
+      { project_public_id: projectPublicId },
+      { item_type: { in: ["user_story", "task"] } },
+    ]
+    if (excludeBacklogItemPublicIds.length > 0) {
+      and.push({ public_id: { notIn: excludeBacklogItemPublicIds } })
+    }
+    const trimmed = q?.trim()
+    if (trimmed && trimmed.length >= 2) {
+      and.push({ title: { contains: trimmed, mode: "insensitive" } })
+    }
+    return { AND: and }
+  }
+
+  async listAvailableSprintCommitItems(
+    workspacePublicId: string,
+    projectPublicId: string,
+    excludeBacklogItemPublicIds: string[],
+    options: { q?: string; skip: number; take: number },
+  ): Promise<ScrumBacklogItemState[]> {
+    const rows = await this.prisma.workItem.findMany({
+      where: this.availableSprintCommitWhere(
+        workspacePublicId,
+        projectPublicId,
+        excludeBacklogItemPublicIds,
+        options.q,
+      ),
+      orderBy: [{ sort_order: "asc" }, { created_at: "asc" }],
+      skip: options.skip,
+      take: options.take,
+      include: { parent_item: { select: { public_id: true } } },
+    })
+    return Promise.all(rows.map((r) => loadState(r as WorkItemWithParent)))
+  }
+
+  async countAvailableSprintCommitItems(
+    workspacePublicId: string,
+    projectPublicId: string,
+    excludeBacklogItemPublicIds: string[],
+    options?: { q?: string },
+  ): Promise<number> {
+    return this.prisma.workItem.count({
+      where: this.availableSprintCommitWhere(
+        workspacePublicId,
+        projectPublicId,
+        excludeBacklogItemPublicIds,
+        options?.q,
+      ),
+    })
   }
 }

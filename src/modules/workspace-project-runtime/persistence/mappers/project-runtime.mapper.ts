@@ -28,6 +28,7 @@ function parseSummary(doc: WorkspaceRuntimeProjectDocProps): InitialConfiguratio
         backlog: true,
         sprints: true,
         board: true,
+        baseMetrics: true,
       }
     }
     if (merged.kind === "kanban") {

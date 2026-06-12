@@ -190,6 +190,36 @@ export function createProjectScrumBacklogRouter(
               assigneeUserPublicId: f.assigneeUserPublicId,
             }
           : undefined
+      const usePagination = f.page !== undefined || f.pageSize !== undefined
+      if (usePagination) {
+        const page = f.page ?? 1
+        const pageSize = f.pageSize ?? 50
+        const paged = await scrumBacklogService.listBacklogItemsPage(
+          actor,
+          workspacePublicId,
+          projectPublicId,
+          page,
+          pageSize,
+          assignmentFilter,
+        )
+        const carryMap = await carryoverDerivationService.deriveForBacklogItems(
+          workspacePublicId,
+          projectPublicId,
+          paged.items.map((i) => i.backlogItemPublicId),
+        )
+        res.status(200).json({
+          items: paged.items.map((i) =>
+            itemToJson(i, carryMap.get(i.backlogItemPublicId) ?? emptyScrumCarryoverJsonFields()),
+          ),
+          pagination: {
+            page: paged.page,
+            pageSize: paged.pageSize,
+            total: paged.total,
+            hasNextPage: paged.hasNextPage,
+          },
+        })
+        return
+      }
       const items = await scrumBacklogService.listBacklogItems(
         actor,
         workspacePublicId,

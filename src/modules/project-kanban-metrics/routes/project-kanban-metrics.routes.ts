@@ -10,6 +10,12 @@ import type { WorkspaceMemberState } from "../../workspace-users/domain/workspac
 import { workspaceUsersAuthMiddlewares } from "../../workspace-users/middleware/workspace-users-auth.middleware.js"
 import type { WorkspaceUserService } from "../../workspace-users/services/workspace-user.service.js"
 import { KanbanMetricsForbiddenError, KanbanMetricsValidationError } from "../domain/kanban-metrics.errors.js"
+import {
+  FlowTimeForbiddenError,
+  FlowTimeScrumNotSupportedError,
+  FlowTimeValidationError,
+} from "../../project-cycle-lead-time/domain/flow-time.errors.js"
+import type { FlowTimeService } from "../../project-cycle-lead-time/services/flow-time.service.js"
 import type { KanbanMetricsService } from "../services/kanban-metrics.service.js"
 import {
   kanbanMetricsMountParamsSchema,
@@ -29,8 +35,16 @@ function respondKanbanMetricsError(err: unknown, res: Response, next: NextFuncti
     res.status(403).json({ error: err.code, message: err.message })
     return
   }
-  if (err instanceof KanbanMetricsValidationError) {
+  if (err instanceof KanbanMetricsValidationError || err instanceof FlowTimeValidationError) {
     res.status(400).json({ error: err.code, message: err.message })
+    return
+  }
+  if (err instanceof FlowTimeForbiddenError) {
+    res.status(403).json({ error: err.code, message: err.message })
+    return
+  }
+  if (err instanceof FlowTimeScrumNotSupportedError) {
+    res.status(422).json({ error: err.code, message: err.message })
     return
   }
   if (err instanceof KanbanFlowNotFoundError) {
@@ -64,6 +78,7 @@ function respondKanbanMetricsError(err: unknown, res: Response, next: NextFuncti
  */
 export function createProjectKanbanMetricsRouter(
   kanbanMetricsService: KanbanMetricsService,
+  flowTimeService: FlowTimeService,
   authBearerService: AuthBearerService,
   workspaceUserService: WorkspaceUserService,
   billingPrimaryProductMutationGate: RequestHandler,
@@ -111,6 +126,29 @@ export function createProjectKanbanMetricsRouter(
         parsedQuery.data,
       )
       res.status(200).json(body)
+    } catch (err) {
+      respondKanbanMetricsError(err, res, next)
+    }
+  })
+
+  router.get("/bootstrap", async (req, res, next) => {
+    try {
+      const parsed = kanbanMetricsMountParamsSchema.safeParse(req.params)
+      if (!parsed.success) {
+        res.status(400).json({ error: "invalid_params", issues: parsed.error.flatten() })
+        return
+      }
+      const actor = getRequiredActor(res)
+      const { workspacePublicId, projectPublicId } = parsed.data
+      const [snapshot, throughput, aging, flowTime] = await Promise.all([
+        kanbanMetricsService.getFlowSnapshot(actor, workspacePublicId, projectPublicId),
+        kanbanMetricsService.getThroughput(actor, workspacePublicId, projectPublicId, {}),
+        kanbanMetricsService.getAging(actor, workspacePublicId, projectPublicId),
+        flowTimeService.getFlowTime(actor, workspacePublicId, projectPublicId, {
+          includeItemDetails: false,
+        }),
+      ])
+      res.status(200).json({ snapshot, throughput, aging, flowTime })
     } catch (err) {
       respondKanbanMetricsError(err, res, next)
     }

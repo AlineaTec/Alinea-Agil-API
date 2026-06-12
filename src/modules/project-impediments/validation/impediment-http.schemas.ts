@@ -13,6 +13,15 @@ export const impedimentPathParamsSchema = impedimentMountParamsSchema.extend({
   impedimentPublicId: uuid,
 })
 
+export const impedimentWorkItemOptionsQuerySchema = z
+  .object({
+    q: z.string().max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+    sprintPublicId: uuid.optional(),
+    includeWorkItemPublicId: uuid.optional(),
+  })
+  .strict()
+
 const severitySchema = z.enum(["low", "medium", "high", "critical"])
 const activeStatusSchema = z.enum(["open", "in_review", "mitigating"])
 
